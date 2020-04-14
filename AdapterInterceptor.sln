@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29911.84
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "com.github.akovac35.AdapterInterceptor", "src\com.github.akovac35.AdapterInterceptor\com.github.akovac35.AdapterInterceptor.csproj", "{3CD8205F-07DF-4BDC-BFE6-DEB93AC346EC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "com.github.akovac35.AdapterInterceptor.Tests", "test\com.github.akovac35.AdapterInterceptor.Tests\com.github.akovac35.AdapterInterceptor.Tests.csproj", "{2E9071E1-FD28-4490-833B-7E62D84E2740}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3CD8205F-07DF-4BDC-BFE6-DEB93AC346EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3CD8205F-07DF-4BDC-BFE6-DEB93AC346EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3CD8205F-07DF-4BDC-BFE6-DEB93AC346EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3CD8205F-07DF-4BDC-BFE6-DEB93AC346EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2E9071E1-FD28-4490-833B-7E62D84E2740}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E9071E1-FD28-4490-833B-7E62D84E2740}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E9071E1-FD28-4490-833B-7E62D84E2740}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E9071E1-FD28-4490-833B-7E62D84E2740}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5D572FFE-37A7-42CE-8A9C-44AE0B55F8CD}
+	EndGlobalSection
+EndGlobal
