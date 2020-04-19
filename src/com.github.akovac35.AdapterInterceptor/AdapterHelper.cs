@@ -6,55 +6,46 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Security.Cryptography;
-using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor
 {
     public static class AdapterHelper
     {
-        public static IList<TypePair> CreateList()
+        public static Dictionary<Type, Type> InitializeSupportedTypePairs()
         {
-            return new List<TypePair>();
+            return new Dictionary<Type, Type>();
         }
 
-        public static IList<TypePair> AddPair<TSource, TTarget>(this IList<TypePair> target, bool addCollectionVariants = true, bool addReverseVariants = false)
+        public static IDictionary<Type, Type> AddTypePair<TSource, TTarget>(this IDictionary<Type, Type> target, bool addCollectionVariants = true, bool addReverseVariants = false)
         {
-            return target.AddPair(typeof(TSource), typeof(TTarget), addCollectionVariants, addReverseVariants);
+            return target.AddTypePair(typeof(TSource), typeof(TTarget), addCollectionVariants, addReverseVariants);
 
         }
 
-        public static IList<TypePair> AddPair(this IList<TypePair> target, Type sourceType, Type destinationType, bool addCollectionVariants = true, bool addReverseVariants = false)
+        public static IDictionary<Type, Type> AddTypePair(this IDictionary<Type, Type> target, Type sourceType, Type destinationType, bool addCollectionVariants = true, bool addReverseVariants = false)
         {
-            target.Add(new TypePair(sourceType, destinationType));
+            target.Add(sourceType, destinationType);
             Type generic;
             if (addCollectionVariants)
             {
                 generic = typeof(IEnumerable<>);
-                target.Add(new TypePair(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType)));
+                target.Add(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
 
-                target.Add(new TypePair(sourceType.MakeArrayType(), destinationType.MakeArrayType()));
+                target.Add(sourceType.MakeArrayType(), destinationType.MakeArrayType());
 
                 generic = typeof(IList<>);
-                target.Add(new TypePair(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType)));
+                target.Add(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
 
                 generic = typeof(List<>);
-                target.Add(new TypePair(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType)));
+                target.Add(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
 
                 generic = typeof(ICollection<>);
-                target.Add(new TypePair(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType)));
+                target.Add(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
             }
 
-            if (addReverseVariants) target.AddPair(destinationType, sourceType, addCollectionVariants, addReverseVariants: false);
+            if (addReverseVariants) target.AddTypePair(destinationType, sourceType, addCollectionVariants, addReverseVariants: false);
 
             return target;
-        }
-
-        public static void VerifyIsValidMethodCombination(MethodInfo adapterMethod, MethodInfo targetMethod)
-        {
-            if (adapterMethod.ReturnType == typeof(void) && adapterMethod.ReturnType != targetMethod.ReturnType) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is void. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
-
-            if (typeof(Task).IsAssignableFrom(adapterMethod.ReturnType) != typeof(Task).IsAssignableFrom(targetMethod.ReturnType)) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is Task. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
         }
 
         public static string? ToLoggerString(this Type? type, bool simpleType = false)

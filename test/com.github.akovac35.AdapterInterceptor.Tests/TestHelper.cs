@@ -1,11 +1,17 @@
 ﻿// Author: Aleksander Kovač
 
+using Autofac;
 using AutoMapper;
+using Castle.DynamicProxy;
+using com.github.akovac35.AdapterInterceptor.Tests.TestServices;
+using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using com.github.akovac35.Logging.Testing;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests
 {
@@ -16,6 +22,19 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             var mapperConfiguration = new MapperConfiguration(cfg => cfg.CreateMap(sourceType, destinationType));
             var mapper = mapperConfiguration.CreateMapper();
             return mapper.Map(source, sourceType, destinationType);
+        }
+
+        public static Dictionary<Type, Type> InitializeSupportedPairsFromMapper(this IMapper mapper, bool addCollectionVariants = true, bool addReverseVariants = false)
+        {
+            var maps = mapper.ConfigurationProvider.GetAllTypeMaps();
+            var supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+            
+            foreach (var item in maps)
+            {
+                supportedTypePairs.AddTypePair(item.SourceType, item.DestinationType, addCollectionVariants: addCollectionVariants, addReverseVariants: addReverseVariants);
+            }
+
+            return supportedTypePairs;
         }
 
         public static List<TOfItem> AsList<TOfItem>(this TOfItem item)
@@ -58,6 +77,107 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
         {
             KeyValuePair<string, object>[] loggerScope = obj.Scope as KeyValuePair<string, object>[];
             TestContext.WriteLine($"[{DateTime.Now.ToLongTimeString()}] {obj.LogLevel.ToString()} <{obj.LoggerName}:{loggerScope?[0].Value}:{loggerScope?[2].Value}> {(obj.Exception != null ? obj.Exception.Message : obj.Message)}");
+        }
+
+        public static IContainer CreateContainerBuilder()
+        {
+            var builder = new ContainerBuilder();
+
+            // Services
+            builder.RegisterType<TestService>();
+
+            // AutoMapper
+            builder.RegisterInstance(new MapperConfiguration(cfg =>
+            {
+                // Just add a few mappings which will not actually be used
+                IEnumerable<Type> builtInPrimitiveTypes = typeof(int).Assembly.GetTypes().Where(t => t.IsPrimitive);
+                var supportedTypePairs = from source in builtInPrimitiveTypes
+                                   from destination in builtInPrimitiveTypes
+                                   where source != destination
+                                   select new TypePair(source, destination);
+                supportedTypePairs = supportedTypePairs.GroupBy(item => item.SourceType).Select(group => group.First());
+                
+                foreach (var item in supportedTypePairs)
+                {
+                    cfg.CreateMap(item.SourceType, item.DestinationType);
+                }
+                cfg.CreateMap<CustomTestType, TestType>().ReverseMap();
+            })).Named<MapperConfiguration>("ComplexMapperConfig");
+            builder.RegisterInstance(new MapperConfiguration(cfg => cfg.CreateMap<CustomTestType, TestType>().ReverseMap())).Named<MapperConfiguration>("SimpleMapperConfig");
+            // Default
+            builder.RegisterInstance(new MapperConfiguration(cfg => cfg.CreateMap<CustomTestType, TestType>().ReverseMap())).AsSelf();
+
+            builder.Register(ctx => ctx.ResolveNamed<MapperConfiguration>("ComplexMapperConfig").CreateMapper()).Named<IMapper>("ComplexMapper");
+            builder.Register(ctx => ctx.ResolveNamed<MapperConfiguration>("SimpleMapperConfig").CreateMapper()).Named<IMapper>("SimpleMapper");
+            // Default
+            builder.Register(ctx => ctx.Resolve<MapperConfiguration>().CreateMapper()).As<IMapper>();
+
+            // IAdapterMapper
+            builder.Register(ctx =>
+            {
+                var mapper = ctx.ResolveNamed<IMapper>("ComplexMapper");
+                var adapterMapper = new DefaultAdapterMapper(mapper, loggerFactory: new NullLoggerFactory());
+                return adapterMapper;
+            }).Named<IAdapterMapper>("ComplexAdapterMapperForBenchmarks").Named<DefaultAdapterMapper>("ComplexDefaultAdapterMapperForBenchmarks");
+            builder.Register(ctx =>
+            {
+                var mapper = ctx.ResolveNamed<IMapper>("SimpleMapper");
+                var adapterMapper = new DefaultAdapterMapper(mapper, loggerFactory: new NullLoggerFactory());
+                return adapterMapper;
+            }).Named<IAdapterMapper>("SimpleAdapterMapperForBenchmarks").Named<DefaultAdapterMapper>("SimpleDefaultAdapterMapperForBenchmarks"); ;
+            // Default
+            builder.Register(ctx =>
+            {
+                var mapper = ctx.Resolve<IMapper>();
+                var adapterMapper = new DefaultAdapterMapper(mapper, loggerFactory: TestHelper.LoggerFactory);
+                return adapterMapper;
+            }).As<IAdapterMapper>().As<DefaultAdapterMapper>();
+
+
+            // AdapterInterceptor
+            builder.Register(ctx =>
+            {
+                var adapterMapper = ctx.ResolveNamed<DefaultAdapterMapper>("ComplexDefaultAdapterMapperForBenchmarks");
+                var target = ctx.Resolve<TestService>();
+                return new AdapterInterceptor<TestService>(target, adapterMapper, adapterMapper.Mapper.InitializeSupportedPairsFromMapper(), new NullLoggerFactory());
+            }).Named<AdapterInterceptor<TestService>>("ComplexAdapterInterceptorForBenchmarks");
+            builder.Register(ctx =>
+            {
+                var adapterMapper = ctx.ResolveNamed<DefaultAdapterMapper>("SimpleDefaultAdapterMapperForBenchmarks");
+                var target = ctx.Resolve<TestService>();
+                return new AdapterInterceptor<TestService>(target, adapterMapper, adapterMapper.Mapper.InitializeSupportedPairsFromMapper(), new NullLoggerFactory());
+            }).Named<AdapterInterceptor<TestService>>("SimpleAdapterInterceptorForBenchmarks");
+            // Default
+            builder.Register(ctx =>
+            {
+                var adapterMapper = ctx.Resolve<DefaultAdapterMapper>();
+                var target = ctx.Resolve<TestService>();
+                return new AdapterInterceptor<TestService>(target, adapterMapper, adapterMapper.Mapper.InitializeSupportedPairsFromMapper(), TestHelper.LoggerFactory);
+            }).AsSelf();
+
+            // Proxies
+            builder.RegisterInstance(new ProxyGenerator(true)).AsSelf();
+            builder.Register(ctx =>
+            {
+                var adapterInterceptor = ctx.ResolveNamed<AdapterInterceptor<TestService>>("ComplexAdapterInterceptorForBenchmarks");
+                var proxyGen = ctx.Resolve<ProxyGenerator>();
+                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService>(adapterInterceptor);
+            }).Named<ICustomTestService>("ComplexCustomTestServiceForBenchmarks");
+            builder.Register(ctx =>
+            {
+                var adapterInterceptor = ctx.ResolveNamed<AdapterInterceptor<TestService>>("SimpleAdapterInterceptorForBenchmarks");
+                var proxyGen = ctx.Resolve<ProxyGenerator>();
+                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService>(adapterInterceptor);
+            }).Named<ICustomTestService>("SimpleCustomTestServiceForBenchmarks");
+            // Default
+            builder.Register(ctx =>
+            {
+                var adapterInterceptor = ctx.Resolve<AdapterInterceptor<TestService>>();
+                var proxyGen = ctx.Resolve<ProxyGenerator>();
+                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService>(adapterInterceptor);
+            }).As<ICustomTestService>();
+
+            return builder.Build();
         }
     }
 }

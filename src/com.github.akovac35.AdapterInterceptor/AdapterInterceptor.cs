@@ -4,32 +4,44 @@ using Castle.DynamicProxy;
 using com.github.akovac35.Logging;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor
 {
-    public class AdapterInterceptor<TTarget> : AdapterInterceptor where TTarget : notnull
-    {
-        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, typeof(TTarget), adapterMapper, loggerFactory)
-        {
-        }
-    }
-
     public class AdapterInterceptor : IInterceptor
     {
-        public AdapterInterceptor(object target, Type targetType, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null)
+        #region Constructors
+        public AdapterInterceptor(object target, Type targetType, IAdapterMapper adapterMapper, IReadOnlyDictionary<Type, Type> supportedTypePairs, ILoggerFactory? loggerFactory = null):
+            this(target, targetType, adapterMapper, loggerFactory)
         {
-            _logger = (loggerFactory ?? LoggerFactoryProvider.LoggerFactory).CreateLogger<AdapterInterceptor>();
+            SupportedTypePairs = supportedTypePairs;
+        }
 
+        protected AdapterInterceptor(object target, Type targetType, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null)
+            :this(loggerFactory)
+        {
             Target = target ?? throw new ArgumentNullException(nameof(target));
             TargetType = targetType ?? throw new ArgumentNullException(nameof(targetType));
             AdapterMapper = adapterMapper ?? throw new ArgumentNullException(nameof(adapterMapper));
+        }
+
+        protected AdapterInterceptor(ILoggerFactory? loggerFactory = null)
+        {
+            _logger = (loggerFactory ?? LoggerFactoryProvider.LoggerFactory).CreateLogger<AdapterInterceptor>();
+
+            Target = null!;
+            TargetType = null!;
+            AdapterMapper = null!;
+            SupportedTypePairs = null!;
 
             _invokeTargetGenericAsync_Method = AssignTargetGenericAsyncMethod();
         }
+        #endregion
+
+        #region Fields and properties
 
         public IAdapterMapper AdapterMapper { get; protected set; }
 
@@ -37,9 +49,13 @@ namespace com.github.akovac35.AdapterInterceptor
 
         public Type TargetType { get; protected set; }
 
-        private ILogger _logger;
+        public IReadOnlyDictionary<Type, Type> SupportedTypePairs { get; protected set; }
+
+        private readonly ILogger _logger;
 
         protected MethodInfo _invokeTargetGenericAsync_Method;
+
+        #endregion
 
         /// <summary>
         /// Adapter can't Proceed(). If it is needed, configure proxy target.
@@ -54,8 +70,8 @@ namespace com.github.akovac35.AdapterInterceptor
             MethodInfo adapterMethod = invocation.Method;
             Type[] adapterMethodTypes = adapterMethod.GetParameters().Select(item => item.ParameterType).ToArray();
 
-            Type[] targetMethodTypes = AdapterMapper.MapSupportedTypes(adapterMethodTypes);
-            MethodInfo targetMethod = AdapterMapper.MapTargetMethod(TargetType, adapterMethod, targetMethodTypes);
+            Type[] targetMethodTypes = MapSupportedTypes(adapterMethodTypes);
+            MethodInfo targetMethod = MapTargetMethod(TargetType, adapterMethod, targetMethodTypes);
 
             object?[] adapterArguments = invocation.Arguments;
             object?[] targetArguments = new object?[adapterArguments.Length];
@@ -71,11 +87,17 @@ namespace com.github.akovac35.AdapterInterceptor
             _logger.Here(l => l.Exiting(mappedReturnValue));
         }
 
+        #region Invocation
+
+        // TODO: optimize for performance
+        // TODO: support value task
+        // TODO: test ref and out
+
         protected virtual object? InvokeTarget(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments)
         {
             _logger.Here(l => l.Entering());
 
-            AdapterHelper.VerifyIsValidMethodCombination(adapterMethod, targetMethod);
+            AssertIsValidMethodCombination(adapterMethod, targetMethod);
 
             object? result;
             Type targetMethodReturnType = targetMethod.ReturnType;
@@ -142,10 +164,98 @@ namespace com.github.akovac35.AdapterInterceptor
             _logger.Here(l => l.Exiting());
         }
 
+        protected virtual void AssertIsValidMethodCombination(MethodInfo adapterMethod, MethodInfo targetMethod)
+        {
+            if (adapterMethod.ReturnType == typeof(void) && adapterMethod.ReturnType != targetMethod.ReturnType) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is void. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
+
+            if (typeof(Task).IsAssignableFrom(adapterMethod.ReturnType) != typeof(Task).IsAssignableFrom(targetMethod.ReturnType)) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is Task. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
+        }
+
         protected virtual MethodInfo AssignTargetGenericAsyncMethod()
         {
             // Will apply to the actual most derived type: https://stackoverflow.com/questions/5780584/will-gettype-return-the-most-derived-type-when-called-from-the-base-class
             return this.GetType().GetMethod("InvokeTargetGenericAsync", BindingFlags.NonPublic | BindingFlags.Instance);
         }
+
+        #endregion
+
+        #region Mapping
+        protected virtual Type[] MapSupportedTypes(Type[] sourceTypes)
+        {
+            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Entering(sourceTypes.ToLoggerString(simpleType: true)));
+
+            Type[] destinationTypes = new Type[sourceTypes.Length];
+            for (int i = 0; i < destinationTypes.Length; i++)
+            {
+                bool isMapped = SupportedTypePairs.TryGetValue(sourceTypes[i], out destinationTypes[i]);
+
+                if (!isMapped) destinationTypes[i] = sourceTypes[i];
+            }
+
+            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Exiting(destinationTypes.ToLoggerString(simpleType: true)));
+            return destinationTypes;
+        }
+
+        protected virtual MethodInfo MapTargetMethod(Type targetType, MethodInfo sourceMethod, Type[] destinationTypes)
+        {
+            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Entering(targetType.ToLoggerString(simpleType: true), sourceMethod.ToLoggerString(simpleType: true), destinationTypes.ToLoggerString(simpleType: true)));
+
+            MethodInfo targetMethodInfo = targetType.GetMethod(sourceMethod.Name, destinationTypes);
+
+            if (targetMethodInfo == null) throw new AdapterInterceptorException($"Target method cannot be found. This is likely due to missing supported type pairs or because target type changed. Target type: {targetType.ToLoggerString()} Target method: {sourceMethod.ToLoggerString()} Target method parameter types: {destinationTypes.ToLoggerString()}");
+
+            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Exiting(targetMethodInfo.ToLoggerString(simpleType: true)));
+            return targetMethodInfo;
+        }
+
+        #endregion
     }
+
+    #region Generic variants
+
+    public class AdapterInterceptor<TTarget> : AdapterInterceptor
+        where TTarget : notnull
+    {
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, IReadOnlyDictionary<Type, Type> supportedTypePairs, ILoggerFactory? loggerFactory = null) : base(target, typeof(TTarget), adapterMapper, supportedTypePairs, loggerFactory) { }
+
+        protected AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, typeof(TTarget), adapterMapper, loggerFactory) { }
+    }
+
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, bool supportCollectionTypeVariants = true, bool supportReverseMapping = true, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            var supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+            supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
+            SupportedTypePairs = supportedTypePairs;
+        }
+    }
+
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, bool supportCollectionTypeVariants = true, bool supportReverseMapping = true, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            var supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+            supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
+            supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
+            SupportedTypePairs = supportedTypePairs;
+        }
+    }
+
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, bool supportCollectionTypeVariants = true, bool supportReverseMapping = true, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            var supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+            supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
+            supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
+            supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
+            SupportedTypePairs = supportedTypePairs;
+        }
+    }
+
+    #endregion
 }

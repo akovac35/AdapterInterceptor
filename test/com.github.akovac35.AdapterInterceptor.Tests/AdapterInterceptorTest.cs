@@ -2,22 +2,27 @@
 
 using Autofac;
 using AutoMapper;
-using Castle.DynamicProxy;
 using com.github.akovac35.AdapterInterceptor.Tests.TestServices;
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using DeepEqual.Syntax;
+using Moq;
 using NUnit.Framework;
-using NUnit.Framework.Constraints;
 using NUnit.Framework.Internal;
 using System;
-using System.Runtime.InteropServices.ComTypes;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests
 {
     [TestFixture]
-    public class AdapterInterceptorTest
+    public class AdapterInterceptorTest: AdapterInterceptor
     {
+        public AdapterInterceptorTest(): base(TestHelper.LoggerFactory)
+        {
+
+        }
+
         [OneTimeSetUp]
         public void OneTimeSetUp()
         {
@@ -28,7 +33,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
         {
         }
 
-        static IContainer Container { get; set; } = CreateContainerBuilder();
+        static IContainer Container { get; set; } = TestHelper.CreateContainerBuilder();
 
         static object[] SynchronousInvocation_Cases
         {
@@ -70,11 +75,12 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             get
             {
                 Func<object, object[], Task<CustomTestType>> ICustomTestServiceTestMethodAsync = (async (service, args) => await ((ICustomTestService)service).TestMethodAsync((CustomTestType)args[0]).ConfigureAwait(false));
+                Func<object, object[], Task<CustomTestType>> ICustomTestServiceTestMethodReturningTask = (async (service, args) => await ((ICustomTestService)service).TestMethodReturningTask((CustomTestType)args[0]).ConfigureAwait(false));
 
                 return new[]
                 {
-                    new object[] { Container.Resolve<ICustomTestService>(), new object[] { new CustomTestType(new TestType()) }, ICustomTestServiceTestMethodAsync, new CustomTestType(new TestType()) }
-
+                    new object[] { Container.Resolve<ICustomTestService>(), new object[] { new CustomTestType(new TestType()) }, ICustomTestServiceTestMethodAsync, new CustomTestType(new TestType()) },
+                    new object[] { Container.Resolve<ICustomTestService>(), new object[] { new CustomTestType(new TestType()) }, ICustomTestServiceTestMethodReturningTask, new CustomTestType(new TestType()) }
                 };
             }
         }
@@ -93,39 +99,89 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             {
                 Assert.IsTrue(expectedResult == result);
             }
-        }        
-
-        static IContainer CreateContainerBuilder()
-        {
-            var builder = new ContainerBuilder();
-
-            // Services
-            builder.RegisterType<TestService>();
-
-            // AutoMapper
-            builder.RegisterInstance(new MapperConfiguration(cfg => cfg.CreateMap<CustomTestType, TestType>().ReverseMap()));
-            builder.Register(ctx => ctx.Resolve<MapperConfiguration>().CreateMapper()).As<IMapper>();
-
-            // AdapterInterceptor
-            builder.Register(ctx =>
-            {
-                var mapper = ctx.Resolve<IMapper>();
-                var supportedTypes = AdapterHelper.CreateList().AddPair<CustomTestType, TestType>(addReverseVariants: true);
-                var adapterMapper = new DefaultAdapterMapper(mapper, supportedTypes, TestHelper.LoggerFactory);
-                var target = ctx.Resolve<TestService>();
-                return new AdapterInterceptor<TestService>(target, adapterMapper, TestHelper.LoggerFactory);
-            }).As<AdapterInterceptor<TestService>>();
-            
-            // Proxies
-            builder.RegisterInstance(new ProxyGenerator(true));
-            builder.Register(ctx =>
-            {
-                var adapterInterceptor = ctx.Resolve<AdapterInterceptor<TestService>>();
-                var proxyGen = ctx.Resolve<ProxyGenerator>();
-                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService>(adapterInterceptor);
-            }).As<ICustomTestService>();
-
-            return builder.Build();
         }
+
+        static object[] KnownMethod_Cases =
+        {
+            new object[] { typeof(ICustomTestService), "SimpleMethod", new Type[] { } },
+            new object[] { typeof(ICustomTestService), "VirtualMethod", new Type[] { typeof(int), typeof(string) } },
+            new object[] { typeof(ICustomTestService), "TestMethodAsync", new Type[] {typeof(CustomTestType), typeof(bool)} }
+        };
+
+        [TestCaseSource("KnownMethod_Cases")]
+        public void MapTargetMethod_ForKnownMethod_FindsMethod(Type targetType, string sourceMethodName, Type[] destinationTypes)
+        {
+            var sourceMethodStub = new Mock<MethodInfo>();
+            sourceMethodStub.Setup(instance => instance.Name).Returns(sourceMethodName);
+            var targetMethodInfo = MapTargetMethod(targetType, sourceMethodStub.Object, destinationTypes);
+
+            Assert.IsNotNull(targetMethodInfo);
+            Assert.AreEqual(sourceMethodName, targetMethodInfo.Name);
+        }
+
+        [Test]
+        public void MapTargetMethod_ForUnknownMethod_ThrowsException()
+        {
+            string sourceMethodName = "xyz";
+            Type[] destinationTypes = new Type[] { typeof(int), typeof(string) };
+            var sourceMethodStub = new Mock<MethodInfo>();
+            sourceMethodStub.Setup(instance => instance.Name).Returns(sourceMethodName);
+
+            var exception = Assert.Throws<AdapterInterceptorException>(() => { MapTargetMethod(typeof(ICustomTestService), sourceMethodStub.Object, destinationTypes); });
+            TestContext.WriteLine(exception.Message);
+        }
+
+        static object[] MapSupportedTypes_ForKnownType_FindsType_Cases =
+        {
+            new object[] { typeof(TestType), typeof(CustomTestType), typeof(TestType), typeof(CustomTestType) },
+            new object[] { typeof(TestType), typeof(CustomTestType), typeof(IList<TestType>), typeof(IList<CustomTestType>) },
+            new object[] { typeof(TestType), typeof(CustomTestType), typeof(List<TestType>), typeof(List<CustomTestType>) },
+            new object[] { typeof(TestType), typeof(CustomTestType), typeof(TestType[]), typeof(CustomTestType[]) },
+            new object[] { typeof(TestType), typeof(CustomTestType), typeof(IEnumerable<TestType>), typeof(IEnumerable<CustomTestType>) },
+            new object[] { typeof(TestType), typeof(CustomTestType), typeof(ICollection<TestType>), typeof(ICollection<CustomTestType>) }
+        };
+
+        [TestCaseSource("MapSupportedTypes_ForKnownType_FindsType_Cases")]
+        public void MapSupportedTypes_ForKnownType_FindsType(Type configSourceType, Type configDestinationType, Type instanceSourceType, Type instanceDestinationType)
+        {
+            try
+            {
+                var supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+                AdapterHelper.AddTypePair(supportedTypePairs, configSourceType, configDestinationType);
+                SupportedTypePairs = supportedTypePairs;
+
+                var mappedInstanceDestinationTypes = MapSupportedTypes(new Type[] { instanceSourceType });
+
+                Assert.IsNotNull(mappedInstanceDestinationTypes);
+                Assert.IsTrue(mappedInstanceDestinationTypes.Length == 1);
+                Assert.IsTrue(instanceSourceType != mappedInstanceDestinationTypes[0]);
+                Assert.IsTrue(mappedInstanceDestinationTypes[0] == instanceDestinationType);
+            }
+            finally
+            {
+                SupportedTypePairs = null;
+            }
+        }
+
+        [Test]
+        public void MapSupportedTypes_ForUnknownType_FindsSourceType([Values(typeof(TestType))] Type sourceType)
+        {
+            try
+            {
+                SupportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+
+                var mappedDestinationTypes = MapSupportedTypes(new Type[] { sourceType });
+
+                Assert.IsNotNull(mappedDestinationTypes);
+                Assert.IsTrue(mappedDestinationTypes.Length == 1);
+                Assert.IsTrue(sourceType == mappedDestinationTypes[0]);
+            }
+            finally
+            {
+                SupportedTypePairs = null;
+            }
+        }
+
+
     }
 }

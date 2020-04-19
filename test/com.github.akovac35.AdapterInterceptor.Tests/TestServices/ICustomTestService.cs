@@ -14,8 +14,12 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 
         object VirtualMethod(int a, string b);
 
-        Task<CustomTestType> TestMethodAsync(CustomTestType a);
+        Task<CustomTestType> TestMethodAsync(CustomTestType a, bool delay = true);
 
         Task<CustomTestType> TestMethodReturningTask(CustomTestType a);
+
+        CustomTestType MethodUsingOneArgument(CustomTestType a);
+
+        CustomTestType MethodUsingFiveArguments(CustomTestType a, CustomTestType b, CustomTestType c, CustomTestType d, CustomTestType e);
     }
 }

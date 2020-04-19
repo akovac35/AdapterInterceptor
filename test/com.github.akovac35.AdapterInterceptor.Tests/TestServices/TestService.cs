@@ -21,9 +21,14 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
             return new object();
         }
 
-        public async Task<TestType> TestMethodAsync(TestType a)
+        public async Task<TestType> TestMethodAsync(TestType a, bool delay = true)
         {
             var result = await Task.FromResult(a).ConfigureAwait(false) ;
+            if (delay)
+            {
+                // Simulate work 
+                await Task.Delay(100);
+            }
             return result;
         }
 
@@ -31,6 +36,16 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
         {
             var result = Task.FromResult(a);
             return result;
+        }
+
+        public TestType MethodUsingOneArgument(TestType a)
+        {
+            return new TestType();
+        }
+
+        public TestType MethodUsingFiveArguments(TestType a, TestType b, TestType c, TestType d, TestType e)
+        {
+            return new TestType();
         }
     }
 }
