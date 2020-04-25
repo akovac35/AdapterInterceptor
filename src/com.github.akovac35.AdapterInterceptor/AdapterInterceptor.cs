@@ -4,6 +4,7 @@ using Castle.DynamicProxy;
 using com.github.akovac35.Logging;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -11,60 +12,65 @@ using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor
 {
-    public class AdapterInterceptor : IInterceptor
+    public class AdapterInterceptor<TTarget> : IInterceptor
     {
         #region Constructors
-        public AdapterInterceptor(object target, Type targetType, IAdapterMapper adapterMapper, IReadOnlyDictionary<Type, Type> supportedTypePairs, ILoggerFactory? loggerFactory = null):
-            this(target, targetType, adapterMapper, loggerFactory)
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, IReadOnlyDictionary<Type, Type> supportedTypePairs, ConcurrentDictionary<MethodInfo, MethodInfo> adapterToTargetMethodDictionary, ILoggerFactory? loggerFactory = null):
+            this(target, adapterMapper, loggerFactory)
         {
             SupportedTypePairs = supportedTypePairs;
+            AdapterToTargetMethodDictionary = adapterToTargetMethodDictionary;
         }
 
-        protected AdapterInterceptor(object target, Type targetType, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null)
+        protected AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null)
             :this(loggerFactory)
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
-            TargetType = targetType ?? throw new ArgumentNullException(nameof(targetType));
+            TargetType = typeof(TTarget);
             AdapterMapper = adapterMapper ?? throw new ArgumentNullException(nameof(adapterMapper));
         }
 
         protected AdapterInterceptor(ILoggerFactory? loggerFactory = null)
         {
-            _logger = (loggerFactory ?? LoggerFactoryProvider.LoggerFactory).CreateLogger<AdapterInterceptor>();
+            _logger = (loggerFactory ?? LoggerFactoryProvider.LoggerFactory).CreateLogger<AdapterInterceptor<TTarget>>();
 
             Target = null!;
             TargetType = null!;
             AdapterMapper = null!;
             SupportedTypePairs = null!;
+            AdapterToTargetMethodDictionary = null!;
 
-            _invokeTargetGenericAsync_Method = AssignTargetGenericAsyncMethod();
+            _invokeTargetGenericTaskAsync_Method = Find_InvokeTargetGenericTaskAsync_Method();
+            _invokeTargetGenericValueTaskAsync_Method = Find_InvokeTargetGenericValueTaskAsync_Method();
         }
         #endregion
 
         #region Fields and properties
 
-        public IAdapterMapper AdapterMapper { get; protected set; }
+        protected IAdapterMapper AdapterMapper { get; set; }
 
-        public object Target { get; protected set; }
+        protected object Target { get; set; }
 
-        public Type TargetType { get; protected set; }
+        protected Type TargetType { get; set; }
 
-        public IReadOnlyDictionary<Type, Type> SupportedTypePairs { get; protected set; }
+        protected IReadOnlyDictionary<Type, Type> SupportedTypePairs { get; set; }
+
+        protected ConcurrentDictionary<MethodInfo, MethodInfo> AdapterToTargetMethodDictionary { get; set; }
 
         private readonly ILogger _logger;
 
-        protected MethodInfo _invokeTargetGenericAsync_Method;
+        protected MethodInfo _invokeTargetGenericTaskAsync_Method;
+
+        protected MethodInfo _invokeTargetGenericValueTaskAsync_Method;
 
         #endregion
 
         /// <summary>
-        /// Adapter can't Proceed(). If it is needed, configure proxy target.
+        /// Invokes target method. Does not call Proceed() because there is nothing to proceed to - this interceptor should always be the last one.
         /// </summary>
-        /// <param name="invocation"></param>
-        public virtual void Intercept(IInvocation? invocation)
+        /// <param name="invocation">Encapsulates an invocation of a proxied method.</param>
+        public virtual void Intercept(IInvocation invocation)
         {
-            if (invocation == null) throw new ArgumentNullException(nameof(invocation));
-
             if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Entering(invocation.ToLoggerString(simpleType: true), invocation.Arguments, invocation.ReturnValue));
             
             MethodInfo adapterMethod = invocation.Method;
@@ -81,100 +87,142 @@ namespace com.github.akovac35.AdapterInterceptor
                 targetArguments[i] = AdapterMapper.Map(adapterArguments[i], adapterMethodTypes[i], targetMethodTypes[i]);
             }
 
-            object? mappedReturnValue = InvokeTarget(adapterMethod, targetMethod, targetArguments);
+            object? mappedReturnValue = InvokeTarget(adapterMethod, targetMethod, targetArguments, invocation, adapterMethodTypes, targetMethodTypes);
             invocation.ReturnValue = mappedReturnValue;
 
-            _logger.Here(l => l.Exiting(mappedReturnValue));
+            // Return values are logged elsewhere
+            _logger.Here(l => l.Exiting());
         }
 
         #region Invocation
 
-        // TODO: optimize for performance
-        // TODO: support value task
-        // TODO: test ref and out
-
-        protected virtual object? InvokeTarget(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments)
+        protected virtual object? InvokeTarget(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments, IInvocation invocation, Type[] adapterMethodTypes, Type[] targetMethodTypes)
         {
-            _logger.Here(l => l.Entering());
-
-            AssertIsValidMethodCombination(adapterMethod, targetMethod);
-
             object? result;
             Type targetMethodReturnType = targetMethod.ReturnType;
-            // Likely synchronous
-            if (targetMethodReturnType == typeof(void) || !typeof(Task).IsAssignableFrom(targetMethodReturnType))
-            {
-                result = InvokeTargetSync(adapterMethod, targetMethod, targetArguments);
-            }
+            
             // Task<>
-            else if(targetMethodReturnType.GetTypeInfo().IsGenericType)
-            {                
-                Type adapterMethodReturnTypeWithoutTask = adapterMethod.ReturnType.GenericTypeArguments[0];
-                MethodInfo genericInvokeTargetGenericAsyncMethod = _invokeTargetGenericAsync_Method.MakeGenericMethod(adapterMethodReturnTypeWithoutTask);
-                result = genericInvokeTargetGenericAsyncMethod.Invoke(this, new object[] { adapterMethod, targetMethod, targetArguments });
+            if(AdapterHelper.IsGenericTask(targetMethodReturnType))
+            {
+                if (AdapterHelper.IsTask(adapterMethod.ReturnType) != AdapterHelper.IsTask(targetMethod.ReturnType)) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is generic Task. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
+
+                MethodInfo genericInvokeTargetGenericTaskAsyncMethod = AdapterToTargetMethodDictionary.GetOrAdd(adapterMethod, item => _invokeTargetGenericTaskAsync_Method.MakeGenericMethod(item.ReturnType.GenericTypeArguments[0]));
+                result = genericInvokeTargetGenericTaskAsyncMethod.Invoke(this, new object[] { adapterMethod, targetMethod, targetArguments });
             }
             // Task
-            else
+            else if(AdapterHelper.IsTask(targetMethodReturnType))
             {
-                result = InvokeTargetAsync(adapterMethod, targetMethod, targetArguments);
-            }
+                if (AdapterHelper.IsTask(adapterMethod.ReturnType) != AdapterHelper.IsTask(targetMethod.ReturnType)) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is Task. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
 
-            _logger.Here(l => l.Exiting());
+                result = InvokeTargetTaskAsync(adapterMethod, targetMethod, targetArguments);
+            }
+            // ValueTask<>
+            else if(AdapterHelper.IsGenericValueTask(targetMethodReturnType))
+            {
+                if (AdapterHelper.IsGenericValueTask(adapterMethod.ReturnType) != AdapterHelper.IsGenericValueTask(targetMethod.ReturnType)) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is generic ValueTask. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
+
+                MethodInfo genericInvokeTargetGenericValueTaskAsyncMethod = AdapterToTargetMethodDictionary.GetOrAdd(adapterMethod, item => _invokeTargetGenericValueTaskAsync_Method.MakeGenericMethod(item.ReturnType.GenericTypeArguments[0]));
+                result = genericInvokeTargetGenericValueTaskAsyncMethod.Invoke(this, new object[] { adapterMethod, targetMethod, targetArguments });
+            }
+            // ValueTask
+            else if (AdapterHelper.IsValueTask(targetMethodReturnType))
+            {
+                if (AdapterHelper.IsValueTask(adapterMethod.ReturnType) != AdapterHelper.IsValueTask(targetMethod.ReturnType)) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is ValueTask. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
+
+                result = InvokeTargetValueTaskAsync(adapterMethod, targetMethod, targetArguments);
+            }
+            else
+            // Likely synchronous
+            {
+                if (AdapterHelper.IsVoid(adapterMethod.ReturnType) && adapterMethod.ReturnType != targetMethod.ReturnType) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is void. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
+
+                result = InvokeTargetSync(adapterMethod, targetMethod, targetArguments, invocation, adapterMethodTypes, targetMethodTypes);
+            }
+            //TODO: add async enumerable
+
             return result;
         }
 
-        protected virtual object? InvokeTargetSync(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments)
+        protected virtual object? InvokeTargetSync(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments, IInvocation invocation, Type[] adapterMethodTypes, Type[] targetMethodTypes)
         {
-            _logger.Here(l => l.Entering());
-            
             object? returnValue = targetMethod.Invoke(Target, targetArguments);
             object? mappedReturnValue = AdapterMapper.Map(returnValue, targetMethod.ReturnType, adapterMethod.ReturnType);
-
-            _logger.Here(l => l.Exiting());
+            if(_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.LogTrace("Target method result: {@0}, adapter method result: {@1}", returnValue, mappedReturnValue));
+            
+            for (int i = 0; i < adapterMethodTypes.Length; i++)
+            {
+                if(adapterMethodTypes[i].IsByRef)
+                {
+                    invocation.Arguments[i] = AdapterMapper.Map(targetArguments[i], targetMethodTypes[i], adapterMethodTypes[i]);
+                    if(_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.LogTrace($"Target method argument[{i}]: {{@0}}, adapter method argument[{i}]: {{@1}}", targetArguments[i], invocation.Arguments[i]));
+                }
+            }
+            
             return mappedReturnValue;
         }
 
-        // Never rename this method, it is invoked by name
-        protected virtual async Task<TDestination> InvokeTargetGenericAsync<TDestination>(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments)
+        protected virtual async Task<TAdapter> InvokeTargetGenericTaskAsync<TAdapter>(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments)
         {
-            _logger.Here(l => l.Entering());
-
-            // Tasks are invariant, to get Task<object> from generic Task<T> target method result we first cast Task<T> to Task
-            // and then retrieve result from the competed task by casting it to a dynamic runtime object
-            Task task = (Task)targetMethod.Invoke(Target, targetArguments);
-            await task.ConfigureAwait(false);
-            object? targetMethodReturnValue = ((dynamic)task).Result;
+            // Tasks are invariant and casting them is limited. Since await is forced to Task<TDestination> by compiler,
+            // dynamic cast must be used to box the invocation result
+            dynamic? task = targetMethod.Invoke(Target, targetArguments) as dynamic;
+            if (task == null)
+            {
+                _logger.Here(l => l.LogTrace("Target method arguments: {@0}", targetArguments));
+                throw new AdapterInterceptorException($"Target method result should be a task but is null. Adapter method: {adapterMethod.ToLoggerString()}, target method: {targetMethod.ToLoggerString()}");
+            }
+            object? targetMethodReturnValue = await task.ConfigureAwait(false);
             // Get type of T from Task<T>
             Type adapterMethodReturnTypeWithoutTask = adapterMethod.ReturnType.GenericTypeArguments[0];
             Type targetMethodReturnTypeWithoutTask = targetMethod.ReturnType.GenericTypeArguments[0];
+            TAdapter mappedReturnValue = (TAdapter)AdapterMapper.Map(targetMethodReturnValue, targetMethodReturnTypeWithoutTask, adapterMethodReturnTypeWithoutTask);
+            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.LogTrace("Target method result: {@0}, adapter method result: {@1}", targetMethodReturnValue, mappedReturnValue));
 
-            TDestination mappedReturnValue = (TDestination)AdapterMapper.Map(targetMethodReturnValue, targetMethodReturnTypeWithoutTask, adapterMethodReturnTypeWithoutTask);
-
-            _logger.Here(l => l.Exiting());
             return mappedReturnValue!;
         }
 
-        protected virtual async Task InvokeTargetAsync(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments)
+        protected virtual async Task InvokeTargetTaskAsync(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments)
         {
-            _logger.Here(l => l.Entering());
-
-            Task task = (Task)targetMethod.Invoke(Target, targetArguments);
+            Task? task = targetMethod.Invoke(Target, targetArguments) as Task;
+            if (task == null)
+            {
+                _logger.Here(l => l.LogTrace("Target method arguments: {@0}", targetArguments));
+                throw new AdapterInterceptorException($"Target method result should be a task but is null. Adapter method: {adapterMethod.ToLoggerString()}, target method: {targetMethod.ToLoggerString()}");
+            }
             await task.ConfigureAwait(false);
-            
-            _logger.Here(l => l.Exiting());
         }
 
-        protected virtual void AssertIsValidMethodCombination(MethodInfo adapterMethod, MethodInfo targetMethod)
+        protected virtual async ValueTask<TAdapter> InvokeTargetGenericValueTaskAsync<TAdapter>(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments)
         {
-            if (adapterMethod.ReturnType == typeof(void) && adapterMethod.ReturnType != targetMethod.ReturnType) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is void. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
+            // ValueTasks are invariant and casting them is limited. Since await is forced to ValueTask<TDestination> by compiler,
+            // dynamic cast must be used to box the invocation result
+            dynamic task = (dynamic)targetMethod.Invoke(Target, targetArguments);
+            object? targetMethodReturnValue = await task.ConfigureAwait(false);
+            // Get type of T from ValueTask<T>
+            Type adapterMethodReturnTypeWithoutTask = adapterMethod.ReturnType.GenericTypeArguments[0];
+            Type targetMethodReturnTypeWithoutTask = targetMethod.ReturnType.GenericTypeArguments[0];
+            TAdapter mappedReturnValue = (TAdapter)AdapterMapper.Map(targetMethodReturnValue, targetMethodReturnTypeWithoutTask, adapterMethodReturnTypeWithoutTask);
+            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.LogTrace("Target method result: {@0}, adapter method result: {@1}", targetMethodReturnValue, mappedReturnValue));
 
-            if (typeof(Task).IsAssignableFrom(adapterMethod.ReturnType) != typeof(Task).IsAssignableFrom(targetMethod.ReturnType)) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is Task. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
+            return mappedReturnValue!;
         }
 
-        protected virtual MethodInfo AssignTargetGenericAsyncMethod()
+        protected virtual async ValueTask InvokeTargetValueTaskAsync(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments)
+        {
+            ValueTask task = (ValueTask)targetMethod.Invoke(Target, targetArguments);
+            await task.ConfigureAwait(false);
+        }
+
+        protected virtual MethodInfo Find_InvokeTargetGenericTaskAsync_Method()
         {
             // Will apply to the actual most derived type: https://stackoverflow.com/questions/5780584/will-gettype-return-the-most-derived-type-when-called-from-the-base-class
-            return this.GetType().GetMethod("InvokeTargetGenericAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+            return this.GetType().GetMethod(nameof(InvokeTargetGenericTaskAsync), BindingFlags.NonPublic | BindingFlags.Instance);
+        }
+
+        protected virtual MethodInfo Find_InvokeTargetGenericValueTaskAsync_Method()
+        {
+            // Will apply to the actual most derived type: https://stackoverflow.com/questions/5780584/will-gettype-return-the-most-derived-type-when-called-from-the-base-class
+            return this.GetType().GetMethod(nameof(InvokeTargetGenericValueTaskAsync), BindingFlags.NonPublic | BindingFlags.Instance);
         }
 
         #endregion
@@ -182,29 +230,24 @@ namespace com.github.akovac35.AdapterInterceptor
         #region Mapping
         protected virtual Type[] MapSupportedTypes(Type[] sourceTypes)
         {
-            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Entering(sourceTypes.ToLoggerString(simpleType: true)));
-
             Type[] destinationTypes = new Type[sourceTypes.Length];
             for (int i = 0; i < destinationTypes.Length; i++)
             {
-                bool isMapped = SupportedTypePairs.TryGetValue(sourceTypes[i], out destinationTypes[i]);
+                bool isMapped = SupportedTypePairs.TryGetValue(sourceTypes[i].IsByRef ? sourceTypes[i].GetElementType() : sourceTypes[i], out destinationTypes[i]);
+                if (isMapped && sourceTypes[i].IsByRef) destinationTypes[i] = destinationTypes[i].MakeByRefType();
 
                 if (!isMapped) destinationTypes[i] = sourceTypes[i];
             }
 
-            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Exiting(destinationTypes.ToLoggerString(simpleType: true)));
             return destinationTypes;
         }
 
         protected virtual MethodInfo MapTargetMethod(Type targetType, MethodInfo sourceMethod, Type[] destinationTypes)
         {
-            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Entering(targetType.ToLoggerString(simpleType: true), sourceMethod.ToLoggerString(simpleType: true), destinationTypes.ToLoggerString(simpleType: true)));
-
             MethodInfo targetMethodInfo = targetType.GetMethod(sourceMethod.Name, destinationTypes);
 
             if (targetMethodInfo == null) throw new AdapterInterceptorException($"Target method cannot be found. This is likely due to missing supported type pairs or because target type changed. Target type: {targetType.ToLoggerString()} Target method: {sourceMethod.ToLoggerString()} Target method parameter types: {destinationTypes.ToLoggerString()}");
 
-            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Exiting(targetMethodInfo.ToLoggerString(simpleType: true)));
             return targetMethodInfo;
         }
 
@@ -212,14 +255,6 @@ namespace com.github.akovac35.AdapterInterceptor
     }
 
     #region Generic variants
-
-    public class AdapterInterceptor<TTarget> : AdapterInterceptor
-        where TTarget : notnull
-    {
-        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, IReadOnlyDictionary<Type, Type> supportedTypePairs, ILoggerFactory? loggerFactory = null) : base(target, typeof(TTarget), adapterMapper, supportedTypePairs, loggerFactory) { }
-
-        protected AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, typeof(TTarget), adapterMapper, loggerFactory) { }
-    }
 
     public class AdapterInterceptor<TTarget, TSource1, TDestination1> : AdapterInterceptor<TTarget>
         where TTarget : notnull
@@ -229,7 +264,11 @@ namespace com.github.akovac35.AdapterInterceptor
             var supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
             supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
             SupportedTypePairs = supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
         }
+        
+        // Do note each generic type variant has its own copy
+        private static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
     }
 
     public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2> : AdapterInterceptor<TTarget>
@@ -241,7 +280,11 @@ namespace com.github.akovac35.AdapterInterceptor
             supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
             supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
             SupportedTypePairs = supportedTypePairs;
+            AdapterToTargetMethodDictionary = _adapterToTargetMethodDictionary;
         }
+
+        // Do note each generic type variant has its own copy
+        private static ConcurrentDictionary<MethodInfo, MethodInfo> _adapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
     }
 
     public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3> : AdapterInterceptor<TTarget>
@@ -254,7 +297,11 @@ namespace com.github.akovac35.AdapterInterceptor
             supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
             supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
             SupportedTypePairs = supportedTypePairs;
+            AdapterToTargetMethodDictionary = _adapterToTargetMethodDictionary;
         }
+
+        // Do note each generic type variant has its own copy
+        private static ConcurrentDictionary<MethodInfo, MethodInfo> _adapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
     }
 
     #endregion

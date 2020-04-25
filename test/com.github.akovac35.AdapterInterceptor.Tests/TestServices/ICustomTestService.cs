@@ -8,15 +8,41 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 {
     public interface ICustomTestService
     {
-        void SimpleMethod();
+        void ReturnVoid_MethodWithoutParameters();
 
-        CustomTestType MethodUsingType(CustomTestType a);
+        CustomTestType ReturnTestType_MethodWithClassParameters(CustomTestType a);
 
-        object VirtualMethod(int a, string b);
+        string ReturnObject_VirtualMethodWithValueTypeParameters(int a, string b);
 
-        Task<CustomTestType> TestMethodAsync(CustomTestType a, bool delay = true);
+        Task<CustomTestType> ReturnGenericTask_MethodWithMixedTypeParametersAsync(CustomTestType a, bool delay = true);
 
-        Task<CustomTestType> TestMethodReturningTask(CustomTestType a);
+        Task<CustomTestType> ReturnGenericTask_MethodWithClassTypeParameters(CustomTestType a);
+
+        Task<CustomTestType> ReturnGenericTask_MethodReturnsNullTask();
+
+        Task ReturnTask_MethodWithMixedTypeParametersAsync(CustomTestType a, bool delay = true);
+
+        Task ReturnTask_MethodWithClassTypeParameters(CustomTestType a);
+
+        ValueTask<CustomTestType> ReturnGenericValueTask_MethodWithMixedTypeParametersAsync(CustomTestType a, bool delay = true);
+
+        ValueTask<CustomTestType> ReturnGenericValueTask_MethodWithClassTypeParameters(CustomTestType a);
+
+        ValueTask ReturnValueTask_MethodWithMixedTypeParametersAsync(CustomTestType a, bool delay = true);
+
+        ValueTask ReturnValueTask_MethodWithClassTypeParameters(CustomTestType a);
+
+        bool ReturnBool_MethodWithRefAndOutMixedTypeParameters(ref int a, out CustomTestType b);
+
+        CustomTestType ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters(CustomTestType a);
+
+        public UnknownType ReturnUnknownType_MethodUsingFiveArgumentsOfUnknownType(UnknownType a, UnknownType b, UnknownType c, UnknownType d, UnknownType e);
+
+        public UnknownType ReturnUnknownType_MethodUsingTwoArgumentsOfUnknownType(UnknownType a, UnknownType b);
+
+        Task<UnknownType> ReturnUnknownType_MethodUsingFiveArgumentsOfUnknownTypeAsync(UnknownType a, UnknownType b, UnknownType c, UnknownType d, UnknownType e);
+
+        Task<UnknownType> ReturnUnknownType_MethodUsingTwoArgumentsOfUnknownTypeAsync(UnknownType a, UnknownType b);
 
         CustomTestType MethodUsingOneArgument(CustomTestType a);
 

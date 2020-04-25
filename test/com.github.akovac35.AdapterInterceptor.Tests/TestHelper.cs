@@ -10,8 +10,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests
 {
@@ -139,20 +141,20 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             {
                 var adapterMapper = ctx.ResolveNamed<DefaultAdapterMapper>("ComplexDefaultAdapterMapperForBenchmarks");
                 var target = ctx.Resolve<TestService>();
-                return new AdapterInterceptor<TestService>(target, adapterMapper, adapterMapper.Mapper.InitializeSupportedPairsFromMapper(), new NullLoggerFactory());
+                return new AdapterInterceptor<TestService>(target, adapterMapper, adapterMapper.Mapper.InitializeSupportedPairsFromMapper(), new ConcurrentDictionary<MethodInfo, MethodInfo>(), new NullLoggerFactory());
             }).Named<AdapterInterceptor<TestService>>("ComplexAdapterInterceptorForBenchmarks");
             builder.Register(ctx =>
             {
                 var adapterMapper = ctx.ResolveNamed<DefaultAdapterMapper>("SimpleDefaultAdapterMapperForBenchmarks");
                 var target = ctx.Resolve<TestService>();
-                return new AdapterInterceptor<TestService>(target, adapterMapper, adapterMapper.Mapper.InitializeSupportedPairsFromMapper(), new NullLoggerFactory());
+                return new AdapterInterceptor<TestService>(target, adapterMapper, adapterMapper.Mapper.InitializeSupportedPairsFromMapper(), new ConcurrentDictionary<MethodInfo, MethodInfo>(), new NullLoggerFactory());
             }).Named<AdapterInterceptor<TestService>>("SimpleAdapterInterceptorForBenchmarks");
             // Default
             builder.Register(ctx =>
             {
                 var adapterMapper = ctx.Resolve<DefaultAdapterMapper>();
                 var target = ctx.Resolve<TestService>();
-                return new AdapterInterceptor<TestService>(target, adapterMapper, adapterMapper.Mapper.InitializeSupportedPairsFromMapper(), TestHelper.LoggerFactory);
+                return new AdapterInterceptor<TestService>(target, adapterMapper, adapterMapper.Mapper.InitializeSupportedPairsFromMapper(), new ConcurrentDictionary<MethodInfo, MethodInfo>(), TestHelper.LoggerFactory);
             }).AsSelf();
 
             // Proxies

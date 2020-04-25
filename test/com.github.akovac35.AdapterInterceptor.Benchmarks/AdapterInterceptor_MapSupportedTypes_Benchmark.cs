@@ -1,8 +1,6 @@
 ﻿using Autofac;
 using AutoMapper;
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Order;
-using com.github.akovac35.AdapterInterceptor;
 using com.github.akovac35.AdapterInterceptor.Tests;
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,7 +10,7 @@ using System.Collections.Generic;
 namespace com.github.akovac35.AdapterInterceptor.Benchmarks
 {
     [MinColumn, MaxColumn]
-    public class AdapterInterceptor_MapSupportedTypes_Benchmark: AdapterInterceptor
+    public class AdapterInterceptor_MapSupportedTypes_Benchmark: AdapterInterceptor<object>
     {
         public AdapterInterceptor_MapSupportedTypes_Benchmark():base(new NullLoggerFactory())
         {

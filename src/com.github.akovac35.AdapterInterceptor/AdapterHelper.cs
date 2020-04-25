@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor
 {
@@ -48,13 +49,80 @@ namespace com.github.akovac35.AdapterInterceptor
             return target;
         }
 
+        private static Type _void = typeof(void);
+
+        public static bool IsVoid(Type t)
+        {
+            if(t == _void)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        private static Type _genericValueTask = typeof(ValueTask<>);
+        public static bool IsGenericValueTask(Type t)
+        {
+            if (t.IsGenericType && t.GetGenericTypeDefinition() == _genericValueTask)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        private static Type _valueTask = typeof(ValueTask);
+
+        public static bool IsValueTask(Type t)
+        {
+            if (_valueTask.IsAssignableFrom(t))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        private static Type _task = typeof(Task);
+
+        public static bool IsGenericTask(Type t)
+        {
+            if (t.IsGenericType && _task.IsAssignableFrom(t))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        public static bool IsTask(Type t)
+        {
+            if (_task.IsAssignableFrom(t))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        #region Logger
+
         public static string? ToLoggerString(this Type? type, bool simpleType = false)
         {
             if (type == null) return null;
             return $"{{Type: {(simpleType ? type.FullName : type.AssemblyQualifiedName)}}}";
         }
 
-        #region Logger
         public static string? ToLoggerString(this Type[]? types, bool simpleType = false)
         {
             if (types == null) return null;

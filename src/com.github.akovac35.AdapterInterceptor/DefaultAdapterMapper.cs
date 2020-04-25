@@ -30,8 +30,6 @@ namespace com.github.akovac35.AdapterInterceptor
 
         public virtual object? Map(object? source, Type sourceType, Type destinationType)
         {
-            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Entering(source, sourceType.ToLoggerString(simpleType: true), destinationType.ToLoggerString(simpleType: true)));
-
             object? destination = null;
             if (sourceType == destinationType)
             {
@@ -39,10 +37,9 @@ namespace com.github.akovac35.AdapterInterceptor
             }
             else
             {
-                destination = Mapper.Map(source, sourceType, destinationType);
+                destination = Mapper.Map(source, sourceType.IsByRef ? sourceType.GetElementType() : sourceType, destinationType.IsByRef ? destinationType.GetElementType() : destinationType);
             }
 
-            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Exiting(destination));
             return destination;
         }
     }
