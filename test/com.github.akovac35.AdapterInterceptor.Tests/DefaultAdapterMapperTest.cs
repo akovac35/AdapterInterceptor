@@ -1,6 +1,11 @@
-﻿// Author: Aleksander Kovač
+﻿// License:
+// Apache License Version 2.0, January 2004
+
+// Authors:
+//   Aleksander Kovač
 
 using AutoMapper;
+using com.github.akovac35.AdapterInterceptor.Default;
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using NUnit.Framework;
 using System.Collections.Generic;
@@ -29,7 +34,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
 
             var mapperConfiguration = new MapperConfiguration(cfg => cfg.CreateMap(sourceType, destinationType));
             var mapper = mapperConfiguration.CreateMapper();
-            var adapterMapper = new DefaultAdapterMapper(mapper, loggerFactory: TestHelper.LoggerFactory);
+            var adapterMapper = new DefaultAdapterMapper(mapper);
 
             var destination = adapterMapper.Map(source, sourceType, destinationType) as CustomTestType;
             Assert.IsNotNull(destination);
@@ -49,7 +54,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
 
             var mapperConfiguration = new MapperConfiguration(cfg => cfg.CreateMap(sourceType, destinationType));
             var mapper = mapperConfiguration.CreateMapper();
-            var adapterMapper = new DefaultAdapterMapper(mapper, loggerFactory: TestHelper.LoggerFactory);
+            var adapterMapper = new DefaultAdapterMapper(mapper);
 
             var destination = adapterMapper.Map(source, sourceTypeCollection, destinationTypeCollection) as List<CustomTestType>;
             Assert.IsNotNull(destination);
@@ -57,7 +62,5 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             Assert.IsTrue(source[0].Name == destination[0].Name);
             Assert.IsTrue(source[0].Value == destination[0].Value);
         }
-
-        
     }
 }

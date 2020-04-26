@@ -1,9 +1,11 @@
-﻿// Author: Aleksander Kovač
+﻿// License:
+// Apache License Version 2.0, January 2004
+
+// Authors:
+//   Aleksander Kovač
 
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using System;
-using System.Diagnostics;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
@@ -26,7 +28,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 
         public async Task<TestType> ReturnGenericTask_MethodWithMixedTypeParametersAsync(TestType a, bool delay = true)
         {
-            var result = await Task.FromResult(a).ConfigureAwait(false) ;
+            var result = await Task.FromResult(a).ConfigureAwait(false);
             if (delay)
             {
                 // Simulate work 
@@ -61,10 +63,9 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
         }
 
         // TODO: Test overriding
-
         public async ValueTask<TestType> ReturnGenericValueTask_MethodWithMixedTypeParametersAsync(TestType a, bool delay = true)
         {
-           if (delay)
+            if (delay)
             {
                 // Simulate work 
                 await Task.Delay(100).ConfigureAwait(false);

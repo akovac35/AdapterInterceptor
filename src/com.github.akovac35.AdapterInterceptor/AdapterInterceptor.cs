@@ -1,8 +1,14 @@
-﻿// Author: Aleksander Kovač
+﻿// License:
+// Apache License Version 2.0, January 2004
+
+// Authors:
+//   Aleksander Kovač
 
 using Castle.DynamicProxy;
+using com.github.akovac35.AdapterInterceptor.Helper;
 using com.github.akovac35.Logging;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,10 +18,21 @@ using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor
 {
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
     public class AdapterInterceptor<TTarget> : IInterceptor
     {
-        #region Constructors
-        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, IReadOnlyDictionary<Type, Type> supportedTypePairs, ConcurrentDictionary<MethodInfo, MethodInfo> adapterToTargetMethodDictionary, ILoggerFactory? loggerFactory = null):
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="supportedTypePairs">Read-only collection of source/target type pairs which will be mapped. Must also contain reverse mappings for method invocation result mapping.</param>
+        /// <param name="adapterToTargetMethodDictionary">Thread-safe collection of adapter/target method mappings. Used for caching. Will be populated at runtime if empty.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, IReadOnlyDictionary<Type, Type> supportedTypePairs, ConcurrentDictionary<MethodInfo, MethodInfo> adapterToTargetMethodDictionary, ILoggerFactory? loggerFactory = null) :
             this(target, adapterMapper, loggerFactory)
         {
             SupportedTypePairs = supportedTypePairs;
@@ -23,7 +40,7 @@ namespace com.github.akovac35.AdapterInterceptor
         }
 
         protected AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null)
-            :this(loggerFactory)
+            : this(loggerFactory)
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
             TargetType = typeof(TTarget);
@@ -32,7 +49,7 @@ namespace com.github.akovac35.AdapterInterceptor
 
         protected AdapterInterceptor(ILoggerFactory? loggerFactory = null)
         {
-            _logger = (loggerFactory ?? LoggerFactoryProvider.LoggerFactory).CreateLogger<AdapterInterceptor<TTarget>>();
+            _logger = loggerFactory?.CreateLogger<AdapterInterceptor<TTarget>>() ?? new NullLogger<AdapterInterceptor<TTarget>>();
 
             Target = null!;
             TargetType = null!;
@@ -43,9 +60,6 @@ namespace com.github.akovac35.AdapterInterceptor
             _invokeTargetGenericTaskAsync_Method = Find_InvokeTargetGenericTaskAsync_Method();
             _invokeTargetGenericValueTaskAsync_Method = Find_InvokeTargetGenericValueTaskAsync_Method();
         }
-        #endregion
-
-        #region Fields and properties
 
         protected IAdapterMapper AdapterMapper { get; set; }
 
@@ -63,16 +77,14 @@ namespace com.github.akovac35.AdapterInterceptor
 
         protected MethodInfo _invokeTargetGenericValueTaskAsync_Method;
 
-        #endregion
-
         /// <summary>
-        /// Invokes target method. Does not call Proceed() because there is nothing to proceed to - this interceptor should always be the last one.
+        /// Applies type and method mappings and invokes target method with mapped argument values. Does not call Proceed() because there is nothing to proceed to - this interceptor should always be the last one.
         /// </summary>
         /// <param name="invocation">Encapsulates an invocation of a proxied method.</param>
         public virtual void Intercept(IInvocation invocation)
         {
             if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Entering(invocation.ToLoggerString(simpleType: true), invocation.Arguments, invocation.ReturnValue));
-            
+
             MethodInfo adapterMethod = invocation.Method;
             Type[] adapterMethodTypes = adapterMethod.GetParameters().Select(item => item.ParameterType).ToArray();
 
@@ -94,15 +106,13 @@ namespace com.github.akovac35.AdapterInterceptor
             _logger.Here(l => l.Exiting());
         }
 
-        #region Invocation
-
         protected virtual object? InvokeTarget(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments, IInvocation invocation, Type[] adapterMethodTypes, Type[] targetMethodTypes)
         {
             object? result;
             Type targetMethodReturnType = targetMethod.ReturnType;
-            
+
             // Task<>
-            if(AdapterHelper.IsGenericTask(targetMethodReturnType))
+            if (AdapterHelper.IsGenericTask(targetMethodReturnType))
             {
                 if (AdapterHelper.IsTask(adapterMethod.ReturnType) != AdapterHelper.IsTask(targetMethod.ReturnType)) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is generic Task. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
 
@@ -110,14 +120,14 @@ namespace com.github.akovac35.AdapterInterceptor
                 result = genericInvokeTargetGenericTaskAsyncMethod.Invoke(this, new object[] { adapterMethod, targetMethod, targetArguments });
             }
             // Task
-            else if(AdapterHelper.IsTask(targetMethodReturnType))
+            else if (AdapterHelper.IsTask(targetMethodReturnType))
             {
                 if (AdapterHelper.IsTask(adapterMethod.ReturnType) != AdapterHelper.IsTask(targetMethod.ReturnType)) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is Task. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
 
                 result = InvokeTargetTaskAsync(adapterMethod, targetMethod, targetArguments);
             }
             // ValueTask<>
-            else if(AdapterHelper.IsGenericValueTask(targetMethodReturnType))
+            else if (AdapterHelper.IsGenericValueTask(targetMethodReturnType))
             {
                 if (AdapterHelper.IsGenericValueTask(adapterMethod.ReturnType) != AdapterHelper.IsGenericValueTask(targetMethod.ReturnType)) throw new AdapterInterceptorException($"Adapter and target method return types should match if either is generic ValueTask. Adapter method: {adapterMethod.ToLoggerString()}, Target method: {targetMethod.ToLoggerString()}");
 
@@ -147,17 +157,17 @@ namespace com.github.akovac35.AdapterInterceptor
         {
             object? returnValue = targetMethod.Invoke(Target, targetArguments);
             object? mappedReturnValue = AdapterMapper.Map(returnValue, targetMethod.ReturnType, adapterMethod.ReturnType);
-            if(_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.LogTrace("Target method result: {@0}, adapter method result: {@1}", returnValue, mappedReturnValue));
-            
+            if (_logger.IsEnabled(LogLevel.Trace)) _logger.Here(l => l.LogTrace("Target method result: {@0}, adapter method result: {@1}", returnValue, mappedReturnValue));
+
             for (int i = 0; i < adapterMethodTypes.Length; i++)
             {
-                if(adapterMethodTypes[i].IsByRef)
+                if (adapterMethodTypes[i].IsByRef)
                 {
                     invocation.Arguments[i] = AdapterMapper.Map(targetArguments[i], targetMethodTypes[i], adapterMethodTypes[i]);
-                    if(_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.LogTrace($"Target method argument[{i}]: {{@0}}, adapter method argument[{i}]: {{@1}}", targetArguments[i], invocation.Arguments[i]));
+                    if (_logger.IsEnabled(LogLevel.Trace)) _logger.Here(l => l.LogTrace($"Target method argument[{i}]: {{@0}}, adapter method argument[{i}]: {{@1}}", targetArguments[i], invocation.Arguments[i]));
                 }
             }
-            
+
             return mappedReturnValue;
         }
 
@@ -165,7 +175,7 @@ namespace com.github.akovac35.AdapterInterceptor
         {
             // Tasks are invariant and casting them is limited. Since await is forced to Task<TDestination> by compiler,
             // dynamic cast must be used to box the invocation result
-            dynamic? task = targetMethod.Invoke(Target, targetArguments) as dynamic;
+            dynamic task = (dynamic)targetMethod.Invoke(Target, targetArguments);
             if (task == null)
             {
                 _logger.Here(l => l.LogTrace("Target method arguments: {@0}", targetArguments));
@@ -176,14 +186,14 @@ namespace com.github.akovac35.AdapterInterceptor
             Type adapterMethodReturnTypeWithoutTask = adapterMethod.ReturnType.GenericTypeArguments[0];
             Type targetMethodReturnTypeWithoutTask = targetMethod.ReturnType.GenericTypeArguments[0];
             TAdapter mappedReturnValue = (TAdapter)AdapterMapper.Map(targetMethodReturnValue, targetMethodReturnTypeWithoutTask, adapterMethodReturnTypeWithoutTask);
-            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.LogTrace("Target method result: {@0}, adapter method result: {@1}", targetMethodReturnValue, mappedReturnValue));
+            if (_logger.IsEnabled(LogLevel.Trace)) _logger.Here(l => l.LogTrace("Target method result: {@0}, adapter method result: {@1}", targetMethodReturnValue, mappedReturnValue));
 
             return mappedReturnValue!;
         }
 
         protected virtual async Task InvokeTargetTaskAsync(MethodInfo adapterMethod, MethodInfo targetMethod, object?[] targetArguments)
         {
-            Task? task = targetMethod.Invoke(Target, targetArguments) as Task;
+            Task task = (Task)targetMethod.Invoke(Target, targetArguments);
             if (task == null)
             {
                 _logger.Here(l => l.LogTrace("Target method arguments: {@0}", targetArguments));
@@ -202,7 +212,7 @@ namespace com.github.akovac35.AdapterInterceptor
             Type adapterMethodReturnTypeWithoutTask = adapterMethod.ReturnType.GenericTypeArguments[0];
             Type targetMethodReturnTypeWithoutTask = targetMethod.ReturnType.GenericTypeArguments[0];
             TAdapter mappedReturnValue = (TAdapter)AdapterMapper.Map(targetMethodReturnValue, targetMethodReturnTypeWithoutTask, adapterMethodReturnTypeWithoutTask);
-            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.LogTrace("Target method result: {@0}, adapter method result: {@1}", targetMethodReturnValue, mappedReturnValue));
+            if (_logger.IsEnabled(LogLevel.Trace)) _logger.Here(l => l.LogTrace("Target method result: {@0}, adapter method result: {@1}", targetMethodReturnValue, mappedReturnValue));
 
             return mappedReturnValue!;
         }
@@ -225,9 +235,6 @@ namespace com.github.akovac35.AdapterInterceptor
             return this.GetType().GetMethod(nameof(InvokeTargetGenericValueTaskAsync), BindingFlags.NonPublic | BindingFlags.Instance);
         }
 
-        #endregion
-
-        #region Mapping
         protected virtual Type[] MapSupportedTypes(Type[] sourceTypes)
         {
             Type[] destinationTypes = new Type[sourceTypes.Length];
@@ -250,59 +257,912 @@ namespace com.github.akovac35.AdapterInterceptor
 
             return targetMethodInfo;
         }
-
-        #endregion
     }
 
-    #region Generic variants
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
 
     public class AdapterInterceptor<TTarget, TSource1, TDestination1> : AdapterInterceptor<TTarget>
         where TTarget : notnull
     {
-        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, bool supportCollectionTypeVariants = true, bool supportReverseMapping = true, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        static AdapterInterceptor()
         {
-            var supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
-            supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
-            SupportedTypePairs = supportedTypePairs;
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
             AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
         }
-        
+
         // Do note each generic type variant has its own copy
-        private static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
     }
 
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
     public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2> : AdapterInterceptor<TTarget>
         where TTarget : notnull
     {
-        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, bool supportCollectionTypeVariants = true, bool supportReverseMapping = true, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        static AdapterInterceptor()
         {
-            var supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
-            supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
-            supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
-            SupportedTypePairs = supportedTypePairs;
-            AdapterToTargetMethodDictionary = _adapterToTargetMethodDictionary;
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
         }
 
         // Do note each generic type variant has its own copy
-        private static ConcurrentDictionary<MethodInfo, MethodInfo> _adapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
     }
 
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
     public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3> : AdapterInterceptor<TTarget>
         where TTarget : notnull
     {
-        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, bool supportCollectionTypeVariants = true, bool supportReverseMapping = true, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        static AdapterInterceptor()
         {
-            var supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
-            supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
-            supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
-            supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: supportCollectionTypeVariants, addReverseVariants: supportReverseMapping);
-            SupportedTypePairs = supportedTypePairs;
-            AdapterToTargetMethodDictionary = _adapterToTargetMethodDictionary;
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
         }
 
         // Do note each generic type variant has its own copy
-        private static ConcurrentDictionary<MethodInfo, MethodInfo> _adapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
     }
 
-    #endregion
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    /// <typeparam name="TSource7">Source type 7. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination7">Destination type 7.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6, TSource7, TDestination7> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource7), typeof(TDestination7), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    /// <typeparam name="TSource7">Source type 7. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination7">Destination type 7.</typeparam>
+    /// <typeparam name="TSource8">Source type 8. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination8">Destination type 8.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6, TSource7, TDestination7, TSource8, TDestination8> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource7), typeof(TDestination7), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource8), typeof(TDestination8), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    /// <typeparam name="TSource7">Source type 7. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination7">Destination type 7.</typeparam>
+    /// <typeparam name="TSource8">Source type 8. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination8">Destination type 8.</typeparam>
+    /// <typeparam name="TSource9">Source type 9. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination9">Destination type 9.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6, TSource7, TDestination7, TSource8, TDestination8, TSource9, TDestination9> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource7), typeof(TDestination7), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource8), typeof(TDestination8), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource9), typeof(TDestination9), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    /// <typeparam name="TSource7">Source type 7. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination7">Destination type 7.</typeparam>
+    /// <typeparam name="TSource8">Source type 8. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination8">Destination type 8.</typeparam>
+    /// <typeparam name="TSource9">Source type 9. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination9">Destination type 9.</typeparam>
+    /// <typeparam name="TSource10">Source type 10. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination10">Destination type 10.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6, TSource7, TDestination7, TSource8, TDestination8, TSource9, TDestination9, TSource10, TDestination10> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource7), typeof(TDestination7), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource8), typeof(TDestination8), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource9), typeof(TDestination9), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource10), typeof(TDestination10), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    /// <typeparam name="TSource7">Source type 7. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination7">Destination type 7.</typeparam>
+    /// <typeparam name="TSource8">Source type 8. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination8">Destination type 8.</typeparam>
+    /// <typeparam name="TSource9">Source type 9. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination9">Destination type 9.</typeparam>
+    /// <typeparam name="TSource10">Source type 10. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination10">Destination type 10.</typeparam>
+    /// <typeparam name="TSource11">Source type 11. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination11">Destination type 11.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6, TSource7, TDestination7, TSource8, TDestination8, TSource9, TDestination9, TSource10, TDestination10, TSource11, TDestination11> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource7), typeof(TDestination7), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource8), typeof(TDestination8), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource9), typeof(TDestination9), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource10), typeof(TDestination10), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource11), typeof(TDestination11), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    /// <typeparam name="TSource7">Source type 7. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination7">Destination type 7.</typeparam>
+    /// <typeparam name="TSource8">Source type 8. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination8">Destination type 8.</typeparam>
+    /// <typeparam name="TSource9">Source type 9. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination9">Destination type 9.</typeparam>
+    /// <typeparam name="TSource10">Source type 10. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination10">Destination type 10.</typeparam>
+    /// <typeparam name="TSource11">Source type 11. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination11">Destination type 11.</typeparam>
+    /// <typeparam name="TSource12">Source type 12. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination12">Destination type 12.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6, TSource7, TDestination7, TSource8, TDestination8, TSource9, TDestination9, TSource10, TDestination10, TSource11, TDestination11, TSource12, TDestination12> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource7), typeof(TDestination7), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource8), typeof(TDestination8), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource9), typeof(TDestination9), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource10), typeof(TDestination10), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource11), typeof(TDestination11), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource12), typeof(TDestination12), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    /// <typeparam name="TSource7">Source type 7. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination7">Destination type 7.</typeparam>
+    /// <typeparam name="TSource8">Source type 8. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination8">Destination type 8.</typeparam>
+    /// <typeparam name="TSource9">Source type 9. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination9">Destination type 9.</typeparam>
+    /// <typeparam name="TSource10">Source type 10. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination10">Destination type 10.</typeparam>
+    /// <typeparam name="TSource11">Source type 11. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination11">Destination type 11.</typeparam>
+    /// <typeparam name="TSource12">Source type 12. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination12">Destination type 12.</typeparam>
+    /// <typeparam name="TSource13">Source type 13. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination13">Destination type 13.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6, TSource7, TDestination7, TSource8, TDestination8, TSource9, TDestination9, TSource10, TDestination10, TSource11, TDestination11, TSource12, TDestination12, TSource13, TDestination13> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource7), typeof(TDestination7), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource8), typeof(TDestination8), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource9), typeof(TDestination9), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource10), typeof(TDestination10), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource11), typeof(TDestination11), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource12), typeof(TDestination12), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource13), typeof(TDestination13), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    /// <typeparam name="TSource7">Source type 7. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination7">Destination type 7.</typeparam>
+    /// <typeparam name="TSource8">Source type 8. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination8">Destination type 8.</typeparam>
+    /// <typeparam name="TSource9">Source type 9. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination9">Destination type 9.</typeparam>
+    /// <typeparam name="TSource10">Source type 10. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination10">Destination type 10.</typeparam>
+    /// <typeparam name="TSource11">Source type 11. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination11">Destination type 11.</typeparam>
+    /// <typeparam name="TSource12">Source type 12. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination12">Destination type 12.</typeparam>
+    /// <typeparam name="TSource13">Source type 13. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination13">Destination type 13.</typeparam>
+    /// <typeparam name="TSource14">Source type 14. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination14">Destination type 14.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6, TSource7, TDestination7, TSource8, TDestination8, TSource9, TDestination9, TSource10, TDestination10, TSource11, TDestination11, TSource12, TDestination12, TSource13, TDestination13, TSource14, TDestination14> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource7), typeof(TDestination7), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource8), typeof(TDestination8), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource9), typeof(TDestination9), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource10), typeof(TDestination10), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource11), typeof(TDestination11), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource12), typeof(TDestination12), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource13), typeof(TDestination13), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource14), typeof(TDestination14), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    /// <typeparam name="TSource7">Source type 7. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination7">Destination type 7.</typeparam>
+    /// <typeparam name="TSource8">Source type 8. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination8">Destination type 8.</typeparam>
+    /// <typeparam name="TSource9">Source type 9. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination9">Destination type 9.</typeparam>
+    /// <typeparam name="TSource10">Source type 10. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination10">Destination type 10.</typeparam>
+    /// <typeparam name="TSource11">Source type 11. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination11">Destination type 11.</typeparam>
+    /// <typeparam name="TSource12">Source type 12. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination12">Destination type 12.</typeparam>
+    /// <typeparam name="TSource13">Source type 13. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination13">Destination type 13.</typeparam>
+    /// <typeparam name="TSource14">Source type 14. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination14">Destination type 14.</typeparam>
+    /// <typeparam name="TSource15">Source type 15. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination15">Destination type 15.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6, TSource7, TDestination7, TSource8, TDestination8, TSource9, TDestination9, TSource10, TDestination10, TSource11, TDestination11, TSource12, TDestination12, TSource13, TDestination13, TSource14, TDestination14, TSource15, TDestination15> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource7), typeof(TDestination7), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource8), typeof(TDestination8), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource9), typeof(TDestination9), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource10), typeof(TDestination10), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource11), typeof(TDestination11), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource12), typeof(TDestination12), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource13), typeof(TDestination13), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource14), typeof(TDestination14), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource15), typeof(TDestination15), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
+
+    /// <summary>
+    /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
+    /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
+    /// </summary>
+    /// <typeparam name="TTarget">Type of target - adaptee</typeparam>
+    /// <typeparam name="TSource1">Source type 1. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination1">Destination type 1.</typeparam>
+    /// <typeparam name="TSource2">Source type 2. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination2">Destination type 2.</typeparam>
+    /// <typeparam name="TSource3">Source type 3. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination3">Destination type 3.</typeparam>
+    /// <typeparam name="TSource4">Source type 4. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination4">Destination type 4.</typeparam>
+    /// <typeparam name="TSource5">Source type 5. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination5">Destination type 5.</typeparam>
+    /// <typeparam name="TSource6">Source type 6. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination6">Destination type 6.</typeparam>
+    /// <typeparam name="TSource7">Source type 7. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination7">Destination type 7.</typeparam>
+    /// <typeparam name="TSource8">Source type 8. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination8">Destination type 8.</typeparam>
+    /// <typeparam name="TSource9">Source type 9. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination9">Destination type 9.</typeparam>
+    /// <typeparam name="TSource10">Source type 10. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination10">Destination type 10.</typeparam>
+    /// <typeparam name="TSource11">Source type 11. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination11">Destination type 11.</typeparam>
+    /// <typeparam name="TSource12">Source type 12. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination12">Destination type 12.</typeparam>
+    /// <typeparam name="TSource13">Source type 13. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination13">Destination type 13.</typeparam>
+    /// <typeparam name="TSource14">Source type 14. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination14">Destination type 14.</typeparam>
+    /// <typeparam name="TSource15">Source type 15. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination15">Destination type 15.</typeparam>
+    /// <typeparam name="TSource16">Source type 16. Must be unique accounting for implicit reverse mapping as well as mappings and reverse mappings of common collection variants.</typeparam>
+    /// <typeparam name="TDestination16">Destination type 16.</typeparam>
+    public class AdapterInterceptor<TTarget, TSource1, TDestination1, TSource2, TDestination2, TSource3, TDestination3, TSource4, TDestination4, TSource5, TDestination5, TSource6, TDestination6, TSource7, TDestination7, TSource8, TDestination8, TSource9, TDestination9, TSource10, TDestination10, TSource11, TDestination11, TSource12, TDestination12, TSource13, TDestination13, TSource14, TDestination14, TSource15, TDestination15, TSource16, TDestination16> : AdapterInterceptor<TTarget>
+        where TTarget : notnull
+    {
+        static AdapterInterceptor()
+        {
+            _supportedTypePairs.AddTypePair(typeof(TSource1), typeof(TDestination1), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource2), typeof(TDestination2), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource3), typeof(TDestination3), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource4), typeof(TDestination4), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource5), typeof(TDestination5), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource6), typeof(TDestination6), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource7), typeof(TDestination7), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource8), typeof(TDestination8), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource9), typeof(TDestination9), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource10), typeof(TDestination10), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource11), typeof(TDestination11), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource12), typeof(TDestination12), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource13), typeof(TDestination13), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource14), typeof(TDestination14), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource15), typeof(TDestination15), addCollectionVariants: true, addReverseVariants: true);
+            _supportedTypePairs.AddTypePair(typeof(TSource16), typeof(TDestination16), addCollectionVariants: true, addReverseVariants: true);
+        }
+
+        /// <summary>
+        /// Initializes a new AdapterInterceptor instance.
+        /// </summary>
+        /// <param name="target">Adaptee instance.</param>
+        /// <param name="adapterMapper">Adapter mapper instance.</param>
+        /// <param name="loggerFactory">Logger factory instace.</param>
+        public AdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
+        {
+            SupportedTypePairs = _supportedTypePairs;
+            AdapterToTargetMethodDictionary = _dapterToTargetMethodDictionary;
+        }
+
+        // Do note each generic type variant has its own copy
+        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
+    }
 }

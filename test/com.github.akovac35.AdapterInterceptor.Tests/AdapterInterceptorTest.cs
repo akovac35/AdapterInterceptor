@@ -1,28 +1,33 @@
-﻿// Author: Aleksander Kovač
+﻿// License:
+// Apache License Version 2.0, January 2004
+
+// Authors:
+//   Aleksander Kovač
 
 using Autofac;
-using AutoMapper;
+using com.github.akovac35.AdapterInterceptor.Helper;
 using com.github.akovac35.AdapterInterceptor.Tests.TestServices;
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using DeepEqual.Syntax;
+using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
-using NUnit.Framework.Internal;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests
 {
     [TestFixture]
-    public class AdapterInterceptorTest: AdapterInterceptor<object>
+    public class AdapterInterceptorTest : AdapterInterceptor<object>
     {
-        public AdapterInterceptorTest(): base(TestHelper.LoggerFactory)
+        public AdapterInterceptorTest() : base(TestHelper.LoggerFactory)
         {
-
+            _logger = TestHelper.LoggerFactory.CreateLogger<AdapterInterceptorTest>();
         }
+
+        private readonly ILogger _logger;
 
         [OneTimeSetUp]
         public void OneTimeSetUp()
@@ -36,7 +41,6 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
 
         static IContainer Container { get; set; } = TestHelper.CreateContainerBuilder();
 
-        #region Synchronous invocation
         static object[] SynchronousInvocation_Cases
         {
             get
@@ -44,7 +48,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
                 Func<object, object[], object> ReturnVoid_MethodWithoutParameters = (service, args) => { ((ICustomTestService)service).ReturnVoid_MethodWithoutParameters(); return null; };
                 Func<object, object[], object> ReturnTestType_MethodWithClassParameters = (service, args) => ((ICustomTestService)service).ReturnTestType_MethodWithClassParameters((CustomTestType)args[0]);
                 Func<object, object[], object> ReturnObject_VirtualMethodWithValueTypeParameters = (service, args) => ((ICustomTestService)service).ReturnObject_VirtualMethodWithValueTypeParameters((int)args[0], (string)args[1]);
-                Func<object, object[], object> ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters = (service, args) => ((ICustomTestService)service).ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters((CustomTestType)args[0]);                
+                Func<object, object[], object> ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters = (service, args) => ((ICustomTestService)service).ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters((CustomTestType)args[0]);
 
                 return new[]
                 {
@@ -96,10 +100,6 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             Assert.IsTrue(expectedOut.IsDeepEqual(mappedOut));
         }
 
-        #endregion
-
-        #region Asynchronous invocation
-
         static object[] AsynchronousTaskInvocation_Cases
         {
             get
@@ -134,7 +134,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             {
                 result = ((dynamic)tmp).Result;
             }
-            else if(isAsync)
+            else if (isAsync)
             {
                 tmp.ConfigureAwait(false).GetAwaiter().GetResult();
             }
@@ -232,10 +232,6 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             TestContext.WriteLine(exception.Message);
         }
 
-        #endregion
-
-        #region Mapping
-
         static object[] KnownMethod_Cases =
         {
             new object[] { typeof(ICustomTestService), nameof(TestService.ReturnVoid_MethodWithoutParameters), new Type[] { } },
@@ -317,6 +313,35 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             }
         }
 
-        #endregion
+        [Test]
+        public void AdapterInterceptor_GenericType_Works()
+        {
+            var service = Container.ResolveNamed<ICustomTestService>("GenericCustomTestService");
+            var result = service.ReturnTestType_MethodWithClassParameters(new CustomTestType(new TestType()));
+
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.IsDeepEqual(new CustomTestType(new TestType())));
+        }
+
+        [Test]
+        public void AdapterInterceptor_InvalidDeclaration_ThrowsException()
+        {
+            var typePair = AdapterHelper.InitializeSupportedTypePairs();
+            typePair.AddTypePair(typeof(TestType), typeof(CustomTestType));
+            // Should not throw exception, we are just repeating what is already defined
+            typePair.AddTypePair(typeof(CustomTestType), typeof(TestType));
+
+            var ex1 = Assert.Throws<AdapterInterceptorException>(() =>
+            {
+                typePair.AddTypePair(typeof(TestType), typeof(UnknownType));
+            }, "Source type mapping for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.TestType} is already defined for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.CustomTestType} and can't be added for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.UnknownType}. Review documentation and usage or use a less generic constructor AdapterInterceptor<TTarget>.");
+            TestContext.WriteLine(ex1.Message);
+
+            var ex2 = Assert.Throws<AdapterInterceptorException>(() =>
+            {
+                typePair.AddTypePair(typeof(CustomTestType), typeof(UnknownType));
+            }, "Source type mapping for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.CustomTestType} is already defined for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.TestType} and can't be added for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.UnknownType}. Review documentation and usage or use a less generic constructor AdapterInterceptor<TTarget>.");
+            TestContext.WriteLine(ex2.Message);
+        }
     }
 }

@@ -1,32 +1,34 @@
-﻿// Author: Aleksander Kovač
+﻿// License:
+// Apache License Version 2.0, January 2004
+
+// Authors:
+//   Aleksander Kovač
 
 using AutoMapper;
-using com.github.akovac35.Logging;
-using Microsoft.Extensions.Logging;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 
-namespace com.github.akovac35.AdapterInterceptor
+namespace com.github.akovac35.AdapterInterceptor.Default
 {
+    /// <summary>
+    /// Default type used to perform mapping from the source object to a new destination object using AutoMapper.
+    /// </summary>
     public class DefaultAdapterMapper : IAdapterMapper
     {
-        public DefaultAdapterMapper(IMapper mapper, ILoggerFactory? loggerFactory = null):this(loggerFactory)
+        /// <summary>
+        /// Initializes a new DefaultAdapterMapper instance.
+        /// </summary>
+        /// <param name="mapper">AutoMapper instance used for object mapping. Must support reverse mapping for method invocation result mapping.</param>
+        public DefaultAdapterMapper(IMapper mapper) : this()
         {
             Mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
         }
 
-        protected DefaultAdapterMapper(ILoggerFactory? loggerFactory = null)
+        protected DefaultAdapterMapper()
         {
-            _logger = (loggerFactory ?? LoggerFactoryProvider.LoggerFactory).CreateLogger<DefaultAdapterMapper>();
-
             Mapper = null!;
         }
 
-        private readonly ILogger _logger;
-
-        public IMapper Mapper { get; protected set; }
+        protected IMapper Mapper { get; set; }
 
         public virtual object? Map(object? source, Type sourceType, Type destinationType)
         {

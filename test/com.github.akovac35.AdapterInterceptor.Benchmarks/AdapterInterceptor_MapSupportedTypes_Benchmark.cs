@@ -1,4 +1,10 @@
-﻿using Autofac;
+﻿// License:
+// Apache License Version 2.0, January 2004
+
+// Authors:
+//   Aleksander Kovač
+
+using Autofac;
 using AutoMapper;
 using BenchmarkDotNet.Attributes;
 using com.github.akovac35.AdapterInterceptor.Tests;
@@ -10,9 +16,9 @@ using System.Collections.Generic;
 namespace com.github.akovac35.AdapterInterceptor.Benchmarks
 {
     [MinColumn, MaxColumn]
-    public class AdapterInterceptor_MapSupportedTypes_Benchmark: AdapterInterceptor<object>
+    public class AdapterInterceptor_MapSupportedTypes_Benchmark : AdapterInterceptor<object>
     {
-        public AdapterInterceptor_MapSupportedTypes_Benchmark():base(new NullLoggerFactory())
+        public AdapterInterceptor_MapSupportedTypes_Benchmark() : base(new NullLoggerFactory())
         {
             _container = TestHelper.CreateContainerBuilder();
             _simple = _container.ResolveNamed<IMapper>("SimpleMapper").InitializeSupportedPairsFromMapper(addCollectionVariants: false);
@@ -20,7 +26,9 @@ namespace com.github.akovac35.AdapterInterceptor.Benchmarks
         }
 
         protected IContainer _container;
+
         protected IReadOnlyDictionary<Type, Type> _simple;
+
         protected IReadOnlyDictionary<Type, Type> _complex;
 
         [Benchmark(Baseline = true)]

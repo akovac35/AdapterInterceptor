@@ -1,6 +1,9 @@
-﻿// Author: Aleksander Kovač
+﻿// License:
+// Apache License Version 2.0, January 2004
 
-using AutoMapper;
+// Authors:
+//   Aleksander Kovač
+
 using Castle.DynamicProxy;
 using System;
 using System.Collections.Generic;
@@ -8,7 +11,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 
-namespace com.github.akovac35.AdapterInterceptor
+namespace com.github.akovac35.AdapterInterceptor.Helper
 {
     public static class AdapterHelper
     {
@@ -20,28 +23,27 @@ namespace com.github.akovac35.AdapterInterceptor
         public static IDictionary<Type, Type> AddTypePair<TSource, TTarget>(this IDictionary<Type, Type> target, bool addCollectionVariants = true, bool addReverseVariants = false)
         {
             return target.AddTypePair(typeof(TSource), typeof(TTarget), addCollectionVariants, addReverseVariants);
-
         }
 
         public static IDictionary<Type, Type> AddTypePair(this IDictionary<Type, Type> target, Type sourceType, Type destinationType, bool addCollectionVariants = true, bool addReverseVariants = false)
         {
-            target.Add(sourceType, destinationType);
+            target.AddWithValidation(sourceType, destinationType);
             Type generic;
             if (addCollectionVariants)
             {
                 generic = typeof(IEnumerable<>);
-                target.Add(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
+                target.AddWithValidation(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
 
-                target.Add(sourceType.MakeArrayType(), destinationType.MakeArrayType());
+                target.AddWithValidation(sourceType.MakeArrayType(), destinationType.MakeArrayType());
 
                 generic = typeof(IList<>);
-                target.Add(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
+                target.AddWithValidation(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
 
                 generic = typeof(List<>);
-                target.Add(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
+                target.AddWithValidation(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
 
                 generic = typeof(ICollection<>);
-                target.Add(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
+                target.AddWithValidation(generic.MakeGenericType(sourceType), generic.MakeGenericType(destinationType));
             }
 
             if (addReverseVariants) target.AddTypePair(destinationType, sourceType, addCollectionVariants, addReverseVariants: false);
@@ -49,11 +51,23 @@ namespace com.github.akovac35.AdapterInterceptor
             return target;
         }
 
+        private static void AddWithValidation(this IDictionary<Type, Type> target, Type key, Type value)
+        {
+            if (target.TryGetValue(key, out Type tmp))
+            {
+                if (tmp != value) throw new AdapterInterceptorException($"Source type mapping for type {key.ToLoggerString(simpleType: true)} is already defined for type {tmp.ToLoggerString(simpleType: true)} and can't be added for type {value.ToLoggerString(simpleType: true)}. Review documentation and usage or use a less generic constructor AdapterInterceptor<TTarget>.");
+            }
+            else
+            {
+                target.Add(key, value);
+            }
+        }
+
         private static Type _void = typeof(void);
 
         public static bool IsVoid(Type t)
         {
-            if(t == _void)
+            if (t == _void)
             {
                 return true;
             }
@@ -64,6 +78,7 @@ namespace com.github.akovac35.AdapterInterceptor
         }
 
         private static Type _genericValueTask = typeof(ValueTask<>);
+
         public static bool IsGenericValueTask(Type t)
         {
             if (t.IsGenericType && t.GetGenericTypeDefinition() == _genericValueTask)
@@ -103,6 +118,7 @@ namespace com.github.akovac35.AdapterInterceptor
                 return false;
             }
         }
+
         public static bool IsTask(Type t)
         {
             if (_task.IsAssignableFrom(t))
@@ -114,8 +130,6 @@ namespace com.github.akovac35.AdapterInterceptor
                 return false;
             }
         }
-
-        #region Logger
 
         public static string? ToLoggerString(this Type? type, bool simpleType = false)
         {
@@ -134,6 +148,7 @@ namespace com.github.akovac35.AdapterInterceptor
             if (parameterInfo == null) return null;
             return $"{{ParameterInfo: {parameterInfo.Name}, {parameterInfo.ParameterType.ToLoggerString(simpleType)}}}";
         }
+
         public static string? ToLoggerString(this ParameterInfo[]? parameterInfos, bool simpleType = false)
         {
             if (parameterInfos == null) return null;
@@ -156,6 +171,5 @@ namespace com.github.akovac35.AdapterInterceptor
             if (invocation == null) return null;
             return $"{{Invocation: {invocation.Method.ToLoggerString(simpleType)}}}";
         }
-        #endregion
     }
 }

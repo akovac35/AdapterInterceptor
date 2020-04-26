@@ -1,4 +1,10 @@
-﻿using Autofac;
+﻿// License:
+// Apache License Version 2.0, January 2004
+
+// Authors:
+//   Aleksander Kovač
+
+using Autofac;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
@@ -6,8 +12,6 @@ using BenchmarkDotNet.Reports;
 using com.github.akovac35.AdapterInterceptor.Tests;
 using com.github.akovac35.AdapterInterceptor.Tests.TestServices;
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
-using DeepEqual.Syntax;
-using Microsoft.Diagnostics.Runtime.Interop;
 using Perfolizer.Horology;
 using System.Collections.Generic;
 
@@ -23,7 +27,7 @@ namespace com.github.akovac35.AdapterInterceptor.Benchmarks
         {
             public Config()
             {
-                WithSummaryStyle(new SummaryStyle(System.Globalization.CultureInfo.InvariantCulture, printUnitsInHeader: true, sizeUnit: SizeUnit.KB, TimeUnit.Microsecond, printUnitsInContent:false, printZeroValuesInContent: true));                
+                WithSummaryStyle(new SummaryStyle(System.Globalization.CultureInfo.InvariantCulture, printUnitsInHeader: true, sizeUnit: SizeUnit.KB, TimeUnit.Microsecond, printUnitsInContent: false, printZeroValuesInContent: true));
             }
         }
 
@@ -37,8 +41,11 @@ namespace com.github.akovac35.AdapterInterceptor.Benchmarks
         }
 
         protected IContainer _container;
+
         protected TestService _original;
+
         protected ICustomTestService _adaptedComplex;
+
         protected ICustomTestService _adaptedSimple;
 
         [BenchmarkCategory("Two arguments, sync"), Benchmark(Baseline = true, Description = "Direct")]
