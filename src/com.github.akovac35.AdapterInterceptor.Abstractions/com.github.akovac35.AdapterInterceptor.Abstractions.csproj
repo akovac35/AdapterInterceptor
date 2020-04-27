@@ -3,8 +3,10 @@
   <PropertyGroup>
     <Description>Abstractions for com.github.akovac35.AdapterInterceptor.
 Commonly used types:
-com.github.akovac35.AdapterInterceptor.IAdapterMapper</Description>
-    <VersionPrefix>1.0.0-rc3</VersionPrefix>
+com.github.akovac35.AdapterInterceptor.IAdapterMapper
+com.github.akovac35.AdapterInterceptorException
+</Description>
+    <VersionPrefix>1.0.0-rc4</VersionPrefix>
     <Authors>Aleksander Kovač</Authors>
     <TargetFrameworks>netstandard2.1</TargetFrameworks>
     <PackageTags>adapter, dynamic, proxy, castle, mapper, interceptor</PackageTags>
@@ -14,7 +16,7 @@ com.github.akovac35.AdapterInterceptor.IAdapterMapper</Description>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageIcon>.NET_Core_Logo.png</PackageIcon>
     <RepositoryType>git</RepositoryType>
-    <PackageReleaseNotes>Release candidate 3.</PackageReleaseNotes>
+    <PackageReleaseNotes>Release candidate 4.</PackageReleaseNotes>
 
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
