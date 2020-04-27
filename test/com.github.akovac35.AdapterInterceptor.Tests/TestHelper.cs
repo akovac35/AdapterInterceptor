@@ -9,17 +9,18 @@ using AutoMapper;
 using Castle.DynamicProxy;
 using com.github.akovac35.AdapterInterceptor.Default;
 using com.github.akovac35.AdapterInterceptor.Helper;
+using com.github.akovac35.AdapterInterceptor.Misc;
 using com.github.akovac35.AdapterInterceptor.Tests.TestServices;
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using com.github.akovac35.Logging.Testing;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests
 {
@@ -84,7 +85,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
         private static void Sink_MessageLogged(WriteContext obj)
         {
             KeyValuePair<string, object>[] loggerScope = obj.Scope as KeyValuePair<string, object>[];
-            TestContext.WriteLine($"[{DateTime.Now.ToLongTimeString()}] {obj.LogLevel.ToString()} <{obj.LoggerName}:{loggerScope?[0].Value}:{loggerScope?[2].Value}> {(obj.Exception != null ? obj.Exception.Message : obj.Message)}");
+            TestContext.WriteLine($"[{DateTime.Now.ToString()}] {Thread.CurrentThread.ManagedThreadId} {obj.LogLevel.ToString()} <{obj.LoggerName}:{loggerScope?[0].Value}:{loggerScope?[2].Value}> {(obj.Exception != null ? obj.Exception.Message : obj.Message)}");
         }
 
         public static IContainer CreateContainerBuilder()
@@ -126,13 +127,13 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
                 var mapper = ctx.ResolveNamed<IMapper>("ComplexMapper");
                 var adapterMapper = new DefaultAdapterMapper(mapper);
                 return adapterMapper;
-            }).Named<IAdapterMapper>("ComplexAdapterMapperForBenchmarks").Named<DefaultAdapterMapper>("ComplexDefaultAdapterMapperForBenchmarks");
+            }).Named<DefaultAdapterMapper>("ComplexDefaultAdapterMapperForBenchmarks");
             builder.Register(ctx =>
             {
                 var mapper = ctx.ResolveNamed<IMapper>("SimpleMapper");
                 var adapterMapper = new DefaultAdapterMapper(mapper);
                 return adapterMapper;
-            }).Named<IAdapterMapper>("SimpleAdapterMapperForBenchmarks").Named<DefaultAdapterMapper>("SimpleDefaultAdapterMapperForBenchmarks"); ;
+            }).Named<DefaultAdapterMapper>("SimpleDefaultAdapterMapperForBenchmarks"); ;
             // Default
             builder.Register(ctx =>
             {
@@ -148,14 +149,16 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
                 var mapper = ctx.ResolveNamed<IMapper>("ComplexMapper");
                 var adapterMapper = ctx.ResolveNamed<DefaultAdapterMapper>("ComplexDefaultAdapterMapperForBenchmarks");
                 var target = ctx.Resolve<TestService>();
-                return new AdapterInterceptor<TestService>(target, adapterMapper, mapper.InitializeSupportedPairsFromMapper(), new ConcurrentDictionary<MethodInfo, MethodInfo>(), new NullLoggerFactory());
+                // Must not use logging for benchmark
+                return new AdapterInterceptor<TestService>(target, adapterMapper, mapper.InitializeSupportedPairsFromMapper(), new ConcurrentDictionary<MethodInfo, AdapterInvocationInformation>());
             }).Named<AdapterInterceptor<TestService>>("ComplexAdapterInterceptorForBenchmarks");
             builder.Register(ctx =>
             {
                 var mapper = ctx.ResolveNamed<IMapper>("SimpleMapper");
                 var adapterMapper = ctx.ResolveNamed<DefaultAdapterMapper>("SimpleDefaultAdapterMapperForBenchmarks");
                 var target = ctx.Resolve<TestService>();
-                return new AdapterInterceptor<TestService>(target, adapterMapper, mapper.InitializeSupportedPairsFromMapper(), new ConcurrentDictionary<MethodInfo, MethodInfo>(), new NullLoggerFactory());
+                // Must not use logging for benchmark
+                return new AdapterInterceptor<TestService>(target, adapterMapper, mapper.InitializeSupportedPairsFromMapper(), new ConcurrentDictionary<MethodInfo, AdapterInvocationInformation>());
             }).Named<AdapterInterceptor<TestService>>("SimpleAdapterInterceptorForBenchmarks");
             // Default
             builder.Register(ctx =>
@@ -163,14 +166,15 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
                 var mapper = ctx.Resolve<IMapper>();
                 var adapterMapper = ctx.Resolve<DefaultAdapterMapper>();
                 var target = ctx.Resolve<TestService>();
-                return new AdapterInterceptor<TestService>(target, adapterMapper, mapper.InitializeSupportedPairsFromMapper(), new ConcurrentDictionary<MethodInfo, MethodInfo>(), TestHelper.LoggerFactory);
+                return new AdapterInterceptor<TestService>(target, adapterMapper, mapper.InitializeSupportedPairsFromMapper(), new ConcurrentDictionary<MethodInfo, AdapterInvocationInformation>(), TestHelper.LoggerFactory);
             }).AsSelf();
             // Generics
             builder.Register(ctx =>
             {
                 var adapterMapper = ctx.Resolve<IAdapterMapper>();
                 var target = ctx.Resolve<TestService>();
-                return new AdapterInterceptor<TestService, TestType, CustomTestType>(target, adapterMapper, TestHelper.LoggerFactory);
+                // Must not use logging for concurrency test
+                return new AdapterInterceptor<TestService, TestType, CustomTestType>(target, adapterMapper);
             }).Named<AdapterInterceptor<TestService>>("GenericAdapterInterceptor");
 
             // Proxies

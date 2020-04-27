@@ -50,7 +50,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
                 string constructor = $@"
     /// <summary>
     /// Used for converting an interface into another interface through type mapping. Supports synchronous/asynchronous methods and out/ref arguments.
-    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic constructor AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
+    /// Implicitly supports reverse mapping as well as mappings and reverse mappings of common collection variants, e.g. TSource[]/IList<TDestination>. Use a less generic variant AdapterInterceptor<TTarget> if this causes problems; for example, the following declaration will result in runtime exception because each source type must be unique and IList<CustomTestType> to TestType[] mapping is implicitly supported via reverse mapping of TestType to CustomTestType: AdapterInterceptor<TTarget, TestType, CusomTestType, IList<CustomTestType>, TestType[]>
     /// Implicitly supported collection variants are: T[], IList<T>, List<T>, IEnumerable<T>, ICollection<T>
     /// Type mapping does not implicitly account for variance/covariance or inheritance relationships, only explicit type pairs will be mapped.
     /// </summary>
@@ -80,7 +80,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
         }}
         
         // Do note each generic type variant has its own copy
-        protected static ConcurrentDictionary<MethodInfo, MethodInfo> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, MethodInfo>();
+        protected static ConcurrentDictionary<MethodInfo, AdapterInvocationInformation> _dapterToTargetMethodDictionary = new ConcurrentDictionary<MethodInfo, AdapterInvocationInformation>();
         protected static Dictionary<Type, Type> _supportedTypePairs = AdapterHelper.InitializeSupportedTypePairs();
     }}";
                 constructors += constructor + Environment.NewLine;

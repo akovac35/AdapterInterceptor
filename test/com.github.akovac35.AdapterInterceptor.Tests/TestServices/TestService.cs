@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 {
-    public class TestService
+    public class TestService: TestServiceBase
     {
         public void ReturnVoid_MethodWithoutParameters()
         {
@@ -21,7 +21,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
             return new TestType();
         }
 
-        public virtual string ReturnObject_VirtualMethodWithValueTypeParameters(int a, string b)
+        public override string ReturnObject_VirtualMethodWithValueTypeParameters(int a, string b)
         {
             return a + b;
         }
@@ -43,7 +43,12 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
             return result;
         }
 
-        public Task<TestType> ReturnGenericTask_MethodReturnsNullTask()
+        public Task<TestType> ReturnGenericTask_MethodReturnsNullGenericTask()
+        {
+            return null;
+        }
+
+        public Task ReturnTask_MethodReturnsNullTask()
         {
             return null;
         }
@@ -62,7 +67,6 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
             return Task.CompletedTask;
         }
 
-        // TODO: Test overriding
         public async ValueTask<TestType> ReturnGenericValueTask_MethodWithMixedTypeParametersAsync(TestType a, bool delay = true)
         {
             if (delay)
@@ -123,6 +127,16 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
         public async Task<UnknownType> ReturnUnknownType_MethodUsingTwoArgumentsOfUnknownTypeAsync(UnknownType a, UnknownType b)
         {
             return await Task.FromResult(new UnknownType()).ConfigureAwait(false);
+        }
+
+        public void ThrowsException()
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task ThrowsExceptionAsync()
+        {
+            await Task.FromException(new NotImplementedException());
         }
 
         public TestType MethodUsingOneArgument(TestType a)

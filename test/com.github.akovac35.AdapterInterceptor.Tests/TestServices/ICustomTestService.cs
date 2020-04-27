@@ -21,7 +21,9 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 
         Task<CustomTestType> ReturnGenericTask_MethodWithClassTypeParameters(CustomTestType a);
 
-        Task<CustomTestType> ReturnGenericTask_MethodReturnsNullTask();
+        Task<CustomTestType> ReturnGenericTask_MethodReturnsNullGenericTask();
+
+        Task ReturnTask_MethodReturnsNullTask();
 
         Task ReturnTask_MethodWithMixedTypeParametersAsync(CustomTestType a, bool delay = true);
 
@@ -46,6 +48,10 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
         Task<UnknownType> ReturnUnknownType_MethodUsingFiveArgumentsOfUnknownTypeAsync(UnknownType a, UnknownType b, UnknownType c, UnknownType d, UnknownType e);
 
         Task<UnknownType> ReturnUnknownType_MethodUsingTwoArgumentsOfUnknownTypeAsync(UnknownType a, UnknownType b);
+
+        void ThrowsException();
+
+        Task ThrowsExceptionAsync();
 
         CustomTestType MethodUsingOneArgument(CustomTestType a);
 

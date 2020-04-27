@@ -21,7 +21,7 @@ namespace com.github.akovac35.AdapterInterceptor.Benchmarks
         public AdapterInterceptor_MapSupportedTypes_Benchmark() : base(new NullLoggerFactory())
         {
             _container = TestHelper.CreateContainerBuilder();
-            _simple = _container.ResolveNamed<IMapper>("SimpleMapper").InitializeSupportedPairsFromMapper(addCollectionVariants: false);
+            _simple = _container.ResolveNamed<IMapper>("SimpleMapper").InitializeSupportedPairsFromMapper();
             _complex = _container.ResolveNamed<IMapper>("ComplexMapper").InitializeSupportedPairsFromMapper(addCollectionVariants: true);
         }
 

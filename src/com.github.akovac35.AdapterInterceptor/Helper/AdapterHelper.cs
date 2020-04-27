@@ -55,7 +55,7 @@ namespace com.github.akovac35.AdapterInterceptor.Helper
         {
             if (target.TryGetValue(key, out Type tmp))
             {
-                if (tmp != value) throw new AdapterInterceptorException($"Source type mapping for type {key.ToLoggerString(simpleType: true)} is already defined for type {tmp.ToLoggerString(simpleType: true)} and can't be added for type {value.ToLoggerString(simpleType: true)}. Review documentation and usage or use a less generic constructor AdapterInterceptor<TTarget>.");
+                if (tmp != value) throw new AdapterInterceptorException($"Source type mapping for type {key.ToLoggerString(simpleType: true)} is already defined for type {tmp.ToLoggerString(simpleType: true)} and can't be added for type {value.ToLoggerString(simpleType: true)}. Review documentation and usage or use a less generic variant AdapterInterceptor<TTarget>.");
             }
             else
             {

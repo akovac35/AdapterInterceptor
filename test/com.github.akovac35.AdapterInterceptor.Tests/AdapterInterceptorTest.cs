@@ -6,6 +6,7 @@
 
 using Autofac;
 using com.github.akovac35.AdapterInterceptor.Helper;
+using com.github.akovac35.AdapterInterceptor.Misc;
 using com.github.akovac35.AdapterInterceptor.Tests.TestServices;
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using DeepEqual.Syntax;
@@ -106,7 +107,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             {
                 Func<object, object[], Task<CustomTestType>> ReturnGenericTask_MethodWithMixedTypeParametersAsync = (async (service, args) => await ((ICustomTestService)service).ReturnGenericTask_MethodWithMixedTypeParametersAsync((CustomTestType)args[0]).ConfigureAwait(false));
                 Func<object, object[], Task<CustomTestType>> ReturnGenericTask_MethodWithClassTypeParameters = ((service, args) => ((ICustomTestService)service).ReturnGenericTask_MethodWithClassTypeParameters((CustomTestType)args[0]));
-                Func<object, object[], Task<CustomTestType>> ReturnGenericTask_MethodReturnsNull = ((service, args) => ((ICustomTestService)service).ReturnGenericTask_MethodReturnsNullTask());
+                Func<object, object[], Task<CustomTestType>> ReturnGenericTask_MethodReturnsNull = ((service, args) => ((ICustomTestService)service).ReturnGenericTask_MethodReturnsNullGenericTask());
 
                 Func<object, object[], Task> ReturnTask_MethodWithMixedTypeParametersAsync = (async (service, args) => await ((ICustomTestService)service).ReturnTask_MethodWithMixedTypeParametersAsync((CustomTestType)args[0]).ConfigureAwait(false));
                 Func<object, object[], Task> ReturnTask_MethodWithClassTypeParameters = ((service, args) => ((ICustomTestService)service).ReturnTask_MethodWithClassTypeParameters((CustomTestType)args[0]));
@@ -117,8 +118,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
                     new object[] { nameof(ReturnGenericTask_MethodWithMixedTypeParametersAsync), Container.Resolve<ICustomTestService>(), new object[] { null }, ReturnGenericTask_MethodWithMixedTypeParametersAsync, null, true, true },
                     new object[] { nameof(ReturnGenericTask_MethodWithClassTypeParameters), Container.Resolve<ICustomTestService>(), new object[] { new CustomTestType(new TestType()) }, ReturnGenericTask_MethodWithClassTypeParameters, new CustomTestType(new TestType()), true, false },
                     new object[] { nameof(ReturnGenericTask_MethodWithClassTypeParameters), Container.Resolve<ICustomTestService>(), new object[] { null }, ReturnGenericTask_MethodWithClassTypeParameters, null, true, false },
-                    //new object[] { nameof(ReturnGenericTask_MethodReturnsNull), Container.Resolve<ICustomTestService>(), new object[] { null }, ReturnGenericTask_MethodReturnsNull, null, true, false },
-
+                    
                     new object[] { nameof(ReturnTask_MethodWithMixedTypeParametersAsync), Container.Resolve<ICustomTestService>(), new object[] { new CustomTestType(new TestType()) }, ReturnTask_MethodWithMixedTypeParametersAsync, null, false, true },
                     new object[] { nameof(ReturnTask_MethodWithClassTypeParameters), Container.Resolve<ICustomTestService>(), new object[] { new CustomTestType(new TestType()) }, ReturnTask_MethodWithClassTypeParameters, null, false, false }
                 };
@@ -209,27 +209,52 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             }
         }
 
+        [Test]
+        public void Intercept_TargetMethodException_UnwrapsAndThrowsException()
+        {
+            var service = Container.Resolve<ICustomTestService>();
+
+            var ex1 = Assert.Throws<NotImplementedException>(() => service.ThrowsException());
+            TestContext.WriteLine(ex1);
+            Assert.AreEqual(ex1.Message,
+@"The method or operation is not implemented.");
+
+            var ex2 = Assert.Throws<AggregateException>(() => service.ThrowsExceptionAsync().Wait());
+            TestContext.WriteLine(ex2);
+            Assert.AreEqual(ex2.Message,
+@"One or more errors occurred. (The method or operation is not implemented.)");
+        }
+
         static object[] NullTask_Cases
         {
             get
             {
-                Func<object, object[], Task<CustomTestType>> ReturnGenericTask_MethodReturnsNull = ((service, args) => ((ICustomTestService)service).ReturnGenericTask_MethodReturnsNullTask());
+                Func<object, object[], Task<CustomTestType>> ReturnGenericTask_MethodReturnsNullGenericTask = ((service, args) => ((ICustomTestService)service).ReturnGenericTask_MethodReturnsNullGenericTask());
+                Func<object, object[], Task> ReturnTask_MethodReturnsNullTask = ((service, args) => ((ICustomTestService)service).ReturnTask_MethodReturnsNullTask());
 
                 return new[]
                 {
-            new object[] { nameof(ReturnGenericTask_MethodReturnsNull), Container.Resolve<ICustomTestService>(), new object[] { null }, ReturnGenericTask_MethodReturnsNull, null, true, false }
-        };
+                    new object[] { nameof(ReturnGenericTask_MethodReturnsNullGenericTask), Container.Resolve<ICustomTestService>(), new object[] { null }, ReturnGenericTask_MethodReturnsNullGenericTask,
+ @"One or more errors occurred. (Target method result should be a generic task but is null.
+Adapter method: {MethodInfo: ReturnGenericTask_MethodReturnsNullGenericTask, Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.Task`1[[com.github.akovac35.AdapterInterceptor.Tests.TestTypes.CustomTestType, com.github.akovac35.AdapterInterceptor.Tests, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]}, DeclaringType: {Type: com.github.akovac35.AdapterInterceptor.Tests.TestServices.ICustomTestService}}
+Target method: {MethodInfo: ReturnGenericTask_MethodReturnsNullGenericTask, Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.Task`1[[com.github.akovac35.AdapterInterceptor.Tests.TestTypes.TestType, com.github.akovac35.AdapterInterceptor.Tests, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]}, DeclaringType: {Type: com.github.akovac35.AdapterInterceptor.Tests.TestServices.TestService}})" },
+                    new object[] { nameof(ReturnTask_MethodReturnsNullTask), Container.Resolve<ICustomTestService>(), new object[] { null }, ReturnTask_MethodReturnsNullTask,
+ @"One or more errors occurred. (Target method result should be a task but is null.
+Adapter method: {MethodInfo: ReturnTask_MethodReturnsNullTask, Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.Task}, DeclaringType: {Type: com.github.akovac35.AdapterInterceptor.Tests.TestServices.ICustomTestService}}
+Target method: {MethodInfo: ReturnTask_MethodReturnsNullTask, Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.Task}, DeclaringType: {Type: com.github.akovac35.AdapterInterceptor.Tests.TestServices.TestService}})" }
+                };
             }
         }
 
         [TestCaseSource("NullTask_Cases")]
-        public void Intercept_ForNullTask_ThrowsException(string testName, object service, object[] inputs, Func<object, object[], Task<CustomTestType>> function, object expectedResult, bool isGeneric, bool isAsync)
+        public void Intercept_ForNullTask_ThrowsException(string testName, object service, object[] inputs, Func<object, object[], Task> function, string expectedMessage)
         {
             var exception = Assert.Throws<AggregateException>(() =>
             {
-                var tmp = function(service, inputs).Result;
+                function(service, inputs).Wait();
             });
-            TestContext.WriteLine(exception.Message);
+            TestContext.WriteLine(exception);
+            Assert.AreEqual(exception.Message, expectedMessage);
         }
 
         static object[] KnownMethod_Cases =
@@ -259,7 +284,12 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             sourceMethodStub.Setup(instance => instance.Name).Returns(sourceMethodName);
 
             var exception = Assert.Throws<AdapterInterceptorException>(() => { MapTargetMethod(typeof(ICustomTestService), sourceMethodStub.Object, destinationTypes); });
-            TestContext.WriteLine(exception.Message);
+            TestContext.WriteLine(exception);
+            Assert.AreEqual(exception.Message,
+@"Target method cannot be found. This is likely due to missing supported type pairs or because target type changed.
+Target type: {Type: com.github.akovac35.AdapterInterceptor.Tests.TestServices.ICustomTestService, com.github.akovac35.AdapterInterceptor.Tests, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null}
+Target method: {MethodInfo: xyz, Parameters: {ParameterInfo[0]: []}, ReturnType: , DeclaringType: }
+Target method parameter types: {Type[2]: [{Type: System.Int32, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e},{Type: System.String, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}]}");
         }
 
         static object[] MapSupportedTypes_ForKnownType_FindsType_Cases =
@@ -334,14 +364,60 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             var ex1 = Assert.Throws<AdapterInterceptorException>(() =>
             {
                 typePair.AddTypePair(typeof(TestType), typeof(UnknownType));
-            }, "Source type mapping for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.TestType} is already defined for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.CustomTestType} and can't be added for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.UnknownType}. Review documentation and usage or use a less generic constructor AdapterInterceptor<TTarget>.");
-            TestContext.WriteLine(ex1.Message);
+            });
+            TestContext.WriteLine(ex1);
+            Assert.AreEqual(ex1.Message, "Source type mapping for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.TestType} is already defined for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.CustomTestType} and can't be added for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.UnknownType}. Review documentation and usage or use a less generic variant AdapterInterceptor<TTarget>.");
 
             var ex2 = Assert.Throws<AdapterInterceptorException>(() =>
             {
                 typePair.AddTypePair(typeof(CustomTestType), typeof(UnknownType));
-            }, "Source type mapping for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.CustomTestType} is already defined for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.TestType} and can't be added for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.UnknownType}. Review documentation and usage or use a less generic constructor AdapterInterceptor<TTarget>.");
+            });
             TestContext.WriteLine(ex2.Message);
+            Assert.AreEqual(ex2.Message, "Source type mapping for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.CustomTestType} is already defined for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.TestType} and can't be added for type {Type: com.github.akovac35.AdapterInterceptor.Tests.TestTypes.UnknownType}. Review documentation and usage or use a less generic variant AdapterInterceptor<TTarget>.");
+        }
+
+        static object[] InvalidReturnTypesCombination_Cases
+        {
+            get
+            {
+                return new[]
+                {
+new object[] { InvocationTypes.Sync,typeof(void), typeof(int),
+@"Adapter and target method return types should match if either is void.
+Adapter method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Void, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}, DeclaringType: }
+Target method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Int32, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}, DeclaringType: }" },
+new object[] { InvocationTypes.Task, typeof(Task<int>), typeof(Task),
+@"Adapter and target method return types should match if target return type is Task.
+Adapter method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.Task`1[[System.Int32, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}, DeclaringType: }
+Target method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.Task, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}, DeclaringType: }" },
+new object[] { InvocationTypes.GenericTask, typeof(Task), typeof(Task<int>),
+@"Adapter and target method return types should both be a generic Task.
+Adapter method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.Task, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}, DeclaringType: }
+Target method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.Task`1[[System.Int32, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}, DeclaringType: }" },
+new object[] { InvocationTypes.GenericValueTask, typeof(ValueTask), typeof(ValueTask<int>),
+@"Adapter and target method return types should both be a generic ValueTask.
+Adapter method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.ValueTask, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}, DeclaringType: }
+Target method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.ValueTask`1[[System.Int32, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}, DeclaringType: }" },
+new object[] { InvocationTypes.ValueTask, typeof(ValueTask<int>), typeof(ValueTask),
+@"Adapter and target method return types should match if target return type is ValueTask.
+Adapter method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.ValueTask`1[[System.Int32, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}, DeclaringType: }
+Target method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {Type: System.Threading.Tasks.ValueTask, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e}, DeclaringType: }" }
+                };
+            }
+        }
+
+        [TestCaseSource("InvalidReturnTypesCombination_Cases")]
+        public void AssertReturnTypeCombination_InvalidReturnTypesCombination_ThrowsException(InvocationTypes invocationType, Type adapterReturnType, Type targetReturnType, string expectedErrorMessage)
+        {
+            var adapterMethodStub = new Mock<MethodInfo>();
+            adapterMethodStub.Setup(instance => instance.ReturnType).Returns(adapterReturnType);
+
+            var targetMethodStub = new Mock<MethodInfo>();
+            targetMethodStub.Setup(instance => instance.ReturnType).Returns(targetReturnType);
+
+            var ex = Assert.Throws<AdapterInterceptorException>(() => AssertReturnTypeCombination(adapterMethodStub.Object, targetMethodStub.Object, invocationType));
+            TestContext.WriteLine(ex);
+            Assert.AreEqual(ex.Message, expectedErrorMessage);
         }
     }
 }
