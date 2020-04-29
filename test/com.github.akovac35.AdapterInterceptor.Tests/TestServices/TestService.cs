@@ -12,22 +12,16 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 {
     public class TestService: TestServiceBase
     {
-        public void ReturnVoid_MethodWithoutParameters()
-        {
-        }
-
-        public TestType ReturnTestType_MethodWithClassParameters(TestType a)
-        {
-            return new TestType();
-        }
-
         public override string ReturnObject_VirtualMethodWithValueTypeParameters(int a, string b)
         {
             return a + b;
         }
 
-        public async Task<TestType> ReturnGenericTask_MethodWithMixedTypeParametersAsync(TestType a, bool delay = true)
+        public async Task<TestType> ReturnGenericTask_MethodWithMixedTypeParametersAsync(TestType a, bool delay = true, bool notProvided1 = true, string notProvided2 = "I was not provided")
         {
+            if (!notProvided1) throw new ArgumentException(nameof(notProvided1));
+            if (notProvided2 != "I was not provided") throw new ArgumentException(nameof(notProvided2));
+
             var result = await Task.FromResult(a).ConfigureAwait(false);
             if (delay)
             {

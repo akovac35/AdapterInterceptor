@@ -9,37 +9,37 @@ using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 {
-    public interface ICustomTestService
+    public interface ICustomTestService<T>
     {
         void ReturnVoid_MethodWithoutParameters();
 
-        CustomTestType ReturnTestType_MethodWithClassParameters(CustomTestType a);
+        T ReturnTestType_MethodWithClassParameters(T a);
 
         string ReturnObject_VirtualMethodWithValueTypeParameters(int a, string b);
 
-        Task<CustomTestType> ReturnGenericTask_MethodWithMixedTypeParametersAsync(CustomTestType a, bool delay = true);
+        Task<T> ReturnGenericTask_MethodWithMixedTypeParametersAsync(T a, bool delay = true, bool notProvided1 = true, string notProvided2 = "I was not provided");
 
-        Task<CustomTestType> ReturnGenericTask_MethodWithClassTypeParameters(CustomTestType a);
+        Task<T> ReturnGenericTask_MethodWithClassTypeParameters(T a);
 
-        Task<CustomTestType> ReturnGenericTask_MethodReturnsNullGenericTask();
+        Task<T> ReturnGenericTask_MethodReturnsNullGenericTask();
 
         Task ReturnTask_MethodReturnsNullTask();
 
-        Task ReturnTask_MethodWithMixedTypeParametersAsync(CustomTestType a, bool delay = true);
+        Task ReturnTask_MethodWithMixedTypeParametersAsync(T a, bool delay = true);
 
-        Task ReturnTask_MethodWithClassTypeParameters(CustomTestType a);
+        Task ReturnTask_MethodWithClassTypeParameters(T a);
 
-        ValueTask<CustomTestType> ReturnGenericValueTask_MethodWithMixedTypeParametersAsync(CustomTestType a, bool delay = true);
+        ValueTask<T> ReturnGenericValueTask_MethodWithMixedTypeParametersAsync(T a, bool delay = true);
 
-        ValueTask<CustomTestType> ReturnGenericValueTask_MethodWithClassTypeParameters(CustomTestType a);
+        ValueTask<T> ReturnGenericValueTask_MethodWithClassTypeParameters(T a);
 
-        ValueTask ReturnValueTask_MethodWithMixedTypeParametersAsync(CustomTestType a, bool delay = true);
+        ValueTask ReturnValueTask_MethodWithMixedTypeParametersAsync(T a, bool delay = true);
 
-        ValueTask ReturnValueTask_MethodWithClassTypeParameters(CustomTestType a);
+        ValueTask ReturnValueTask_MethodWithClassTypeParameters(T a);
 
-        bool ReturnBool_MethodWithRefAndOutMixedTypeParameters(ref int a, out CustomTestType b);
+        bool ReturnBool_MethodWithRefAndOutMixedTypeParameters(ref int a, out T b);
 
-        CustomTestType ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters(CustomTestType a);
+        T ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters(T a);
 
         public UnknownType ReturnUnknownType_MethodUsingFiveArgumentsOfUnknownType(UnknownType a, UnknownType b, UnknownType c, UnknownType d, UnknownType e);
 
@@ -53,8 +53,8 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 
         Task ThrowsExceptionAsync();
 
-        CustomTestType MethodUsingOneArgument(CustomTestType a);
+        T MethodUsingOneArgument(T a);
 
-        CustomTestType MethodUsingFiveArguments(CustomTestType a, CustomTestType b, CustomTestType c, CustomTestType d, CustomTestType e);
+        T MethodUsingFiveArguments(T a, T b, T c, T d, T e);
     }
 }

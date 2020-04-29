@@ -32,7 +32,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
         public void Concurrent_Intercept_Works()
         {
             // Must be without enabled logging to avoid consuming resources
-            var service = Container.ResolveNamed<ICustomTestService>("GenericCustomTestService");
+            var service = Container.ResolveNamed<ICustomTestService<CustomTestType>>("GenericCustomTestService");
 
             // Aiming for about 10s of work
             Action action1 = () =>

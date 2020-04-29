@@ -9,3 +9,4 @@ Write about:
 - extending and before / after invoke
 - performance
 - logging and diagnostics
+- mention inheritance, interfaces and default values

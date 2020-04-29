@@ -183,28 +183,28 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             {
                 var adapterInterceptor = ctx.ResolveNamed<AdapterInterceptor<TestService>>("ComplexAdapterInterceptorForBenchmarks");
                 var proxyGen = ctx.Resolve<ProxyGenerator>();
-                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService>(adapterInterceptor);
-            }).Named<ICustomTestService>("ComplexCustomTestServiceForBenchmarks");
+                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService<CustomTestType>>(adapterInterceptor);
+            }).Named<ICustomTestService<CustomTestType>>("ComplexCustomTestServiceForBenchmarks");
             builder.Register(ctx =>
             {
                 var adapterInterceptor = ctx.ResolveNamed<AdapterInterceptor<TestService>>("SimpleAdapterInterceptorForBenchmarks");
                 var proxyGen = ctx.Resolve<ProxyGenerator>();
-                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService>(adapterInterceptor);
-            }).Named<ICustomTestService>("SimpleCustomTestServiceForBenchmarks");
+                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService<CustomTestType>>(adapterInterceptor);
+            }).Named<ICustomTestService<CustomTestType>>("SimpleCustomTestServiceForBenchmarks");
             // Default
             builder.Register(ctx =>
             {
                 var adapterInterceptor = ctx.Resolve<AdapterInterceptor<TestService>>();
                 var proxyGen = ctx.Resolve<ProxyGenerator>();
-                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService>(adapterInterceptor);
-            }).As<ICustomTestService>();
+                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService<CustomTestType>>(adapterInterceptor);
+            }).As<ICustomTestService<CustomTestType>>();
             // Generic
             builder.Register(ctx =>
             {
                 var adapterInterceptor = ctx.ResolveNamed<AdapterInterceptor<TestService>>("GenericAdapterInterceptor");
                 var proxyGen = ctx.Resolve<ProxyGenerator>();
-                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService>(adapterInterceptor);
-            }).Named<ICustomTestService>("GenericCustomTestService");
+                return proxyGen.CreateInterfaceProxyWithoutTarget<ICustomTestService<CustomTestType>>(adapterInterceptor);
+            }).Named<ICustomTestService<CustomTestType>>("GenericCustomTestService");
 
             return builder.Build();
         }

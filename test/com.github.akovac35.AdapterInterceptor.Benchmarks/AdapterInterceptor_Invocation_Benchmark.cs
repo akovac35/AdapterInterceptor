@@ -36,17 +36,17 @@ namespace com.github.akovac35.AdapterInterceptor.Benchmarks
             _container = TestHelper.CreateContainerBuilder();
 
             _original = new TestService();
-            _adaptedComplex = _container.ResolveNamed<ICustomTestService>("ComplexCustomTestServiceForBenchmarks");
-            _adaptedSimple = _container.ResolveNamed<ICustomTestService>("SimpleCustomTestServiceForBenchmarks");
+            _adaptedComplex = _container.ResolveNamed<ICustomTestService<CustomTestType>>("ComplexCustomTestServiceForBenchmarks");
+            _adaptedSimple = _container.ResolveNamed<ICustomTestService<CustomTestType>>("SimpleCustomTestServiceForBenchmarks");
         }
 
         protected IContainer _container;
 
         protected TestService _original;
 
-        protected ICustomTestService _adaptedComplex;
+        protected ICustomTestService<CustomTestType> _adaptedComplex;
 
-        protected ICustomTestService _adaptedSimple;
+        protected ICustomTestService<CustomTestType> _adaptedSimple;
 
         [BenchmarkCategory("Two arguments, sync"), Benchmark(Baseline = true, Description = "Direct")]
         [ArgumentsSource(nameof(TwoArguments))]
