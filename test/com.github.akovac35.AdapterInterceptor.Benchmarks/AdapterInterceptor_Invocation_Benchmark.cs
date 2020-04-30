@@ -38,6 +38,19 @@ namespace com.github.akovac35.AdapterInterceptor.Benchmarks
             _original = new TestService();
             _adaptedComplex = _container.ResolveNamed<ICustomTestService<CustomTestType>>("ComplexCustomTestServiceForBenchmarks");
             _adaptedSimple = _container.ResolveNamed<ICustomTestService<CustomTestType>>("SimpleCustomTestServiceForBenchmarks");
+
+            // Create multiple method cache entries for both - cache is shared within a type variant
+            _adaptedSimple.ReturnVoid_MethodWithoutParameters();
+            _adaptedSimple.ReturnTestType_MethodWithClassParameters(new CustomTestType());
+            _adaptedSimple.ReturnObject_VirtualMethodWithValueTypeParameters(0, "test");
+            _adaptedSimple.ReturnGenericTask_MethodWithMixedTypeParametersAsync(new CustomTestType());
+            _adaptedSimple.ReturnGenericTask_MethodWithClassTypeParameters(new CustomTestType());
+            _adaptedSimple.ReturnTask_MethodWithMixedTypeParametersAsync(new CustomTestType());
+            _adaptedSimple.ReturnTask_MethodWithClassTypeParameters(new CustomTestType());
+            _adaptedSimple.ReturnGenericValueTask_MethodWithMixedTypeParametersAsync(new CustomTestType());
+            _adaptedSimple.ReturnGenericValueTask_MethodWithClassTypeParameters(new CustomTestType());
+            _adaptedSimple.ReturnValueTask_MethodWithMixedTypeParametersAsync(new CustomTestType());
+            _adaptedSimple.ReturnValueTask_MethodWithClassTypeParameters(new CustomTestType());
         }
 
         protected IContainer _container;
