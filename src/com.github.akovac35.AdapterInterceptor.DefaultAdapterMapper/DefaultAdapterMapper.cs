@@ -7,7 +7,7 @@
 using AutoMapper;
 using System;
 
-namespace com.github.akovac35.AdapterInterceptor.Default
+namespace com.github.akovac35.AdapterInterceptor
 {
     /// <summary>
     /// Default type used to perform mapping from the source object to a new destination object using AutoMapper.

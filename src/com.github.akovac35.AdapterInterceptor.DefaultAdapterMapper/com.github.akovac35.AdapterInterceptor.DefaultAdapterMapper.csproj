@@ -1,7 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Powered by Castle Core, AdapterInterceptor enables the generation of efficient dynamic proxies for converting an interface into another interface without requiring virtual methods or dedicated target interfaces.</Description>
+    <Description>
+      Provides an AutoMapper based default implementation of com.github.akovac35.IAdapterMapper for com.github.akovac35.AdapterInterceptor.
+    </Description>
     <VersionPrefix>1.0.0-rc5</VersionPrefix>
     <Authors>Aleksander Kovač</Authors>
     <TargetFrameworks>netstandard2.1</TargetFrameworks>
@@ -20,12 +22,12 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
 
-  <ItemGroup>    
-    <PackageReference Include="Castle.Core" Version="4.4.0" />
-    <PackageReference Include="com.github.akovac35.Logging" Version="1.0.8" />
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-
+  <ItemGroup>
     <None Include="../../Resources/.NET_Core_Logo.png" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoMapper" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>

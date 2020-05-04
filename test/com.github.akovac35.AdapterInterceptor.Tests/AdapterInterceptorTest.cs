@@ -50,13 +50,15 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
                 Func<object, object[], object> ReturnTestType_MethodWithClassParameters = (service, args) => ((ICustomTestService<CustomTestType>)service).ReturnTestType_MethodWithClassParameters((CustomTestType)args[0]);
                 Func<object, object[], object> ReturnObject_VirtualMethodWithValueTypeParameters = (service, args) => ((ICustomTestService<CustomTestType>)service).ReturnObject_VirtualMethodWithValueTypeParameters((int)args[0], (string)args[1]);
                 Func<object, object[], object> ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters = (service, args) => ((ICustomTestService<CustomTestType>)service).ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters((CustomTestType)args[0]);
+                Func<object, object[], object> Disposable = (service, args) => { ((IDisposable)service).Dispose(); return null; };
 
                 return new[]
                 {
                     new object[] { nameof(ReturnVoid_MethodWithoutParameters), Container.Resolve<ICustomTestService<CustomTestType>>(), null, ReturnVoid_MethodWithoutParameters, null },
                     new object[] { nameof(ReturnTestType_MethodWithClassParameters), Container.Resolve<ICustomTestService<CustomTestType>>(), new object[] { new CustomTestType(new TestType()) }, ReturnTestType_MethodWithClassParameters, new CustomTestType(new TestType()) },
                     new object[] { nameof(ReturnObject_VirtualMethodWithValueTypeParameters), Container.Resolve<ICustomTestService<CustomTestType>>(), new object[] { 100, "testing" }, ReturnObject_VirtualMethodWithValueTypeParameters, "100testing" },
-                    new object[] { nameof(ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters), Container.Resolve<ICustomTestService<CustomTestType>>(), new object[] { null }, ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters, null }
+                    new object[] { nameof(ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters), Container.Resolve<ICustomTestService<CustomTestType>>(), new object[] { null }, ReturnTestType_MethodRequiringNullArgumentValueAndReturningNullWithClassTypeParameters, null },
+                    new object[] { nameof(Disposable), Container.Resolve<ICustomTestService<CustomTestType>>(), new object[] { null }, Disposable, null }
                 };
             }
         }

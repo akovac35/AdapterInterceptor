@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 {
-    public class TestService: TestServiceBase
+    public class TestService: TestServiceBase, IDisposable
     {
         public override string ReturnObject_VirtualMethodWithValueTypeParameters(int a, string b)
         {
@@ -141,6 +141,13 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
         public TestType MethodUsingFiveArguments(TestType a, TestType b, TestType c, TestType d, TestType e)
         {
             return new TestType();
+        }
+
+        public bool Disposed { get; set; }
+
+        public void Dispose()
+        {
+            Disposed = true;
         }
     }
 }

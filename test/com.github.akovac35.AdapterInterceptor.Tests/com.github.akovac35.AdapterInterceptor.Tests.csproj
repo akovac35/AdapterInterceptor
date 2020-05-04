@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\com.github.akovac35.AdapterInterceptor.DefaultAdapterMapper\com.github.akovac35.AdapterInterceptor.DefaultAdapterMapper.csproj" />
     <ProjectReference Include="..\..\src\com.github.akovac35.AdapterInterceptor\com.github.akovac35.AdapterInterceptor.csproj" />
   </ItemGroup>
 

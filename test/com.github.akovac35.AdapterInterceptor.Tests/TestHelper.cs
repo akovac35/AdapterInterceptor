@@ -7,7 +7,6 @@
 using Autofac;
 using AutoMapper;
 using Castle.DynamicProxy;
-using com.github.akovac35.AdapterInterceptor.Default;
 using com.github.akovac35.AdapterInterceptor.Helper;
 using com.github.akovac35.AdapterInterceptor.Misc;
 using com.github.akovac35.AdapterInterceptor.Tests.TestServices;

@@ -5,7 +5,6 @@
 //   Aleksander Kovač
 
 using AutoMapper;
-using com.github.akovac35.AdapterInterceptor.Default;
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using NUnit.Framework;
 using System.Collections.Generic;

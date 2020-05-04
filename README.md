@@ -10,3 +10,4 @@ Write about:
 - performance
 - logging and diagnostics
 - mention inheritance, interfaces and default values
+- disposing

@@ -11,7 +11,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "com.github.akovac35.Adapter
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "com.github.akovac35.AdapterInterceptor.Concurrency.Tests", "test\com.github.akovac35.AdapterInterceptor.Concurrency.Tests\com.github.akovac35.AdapterInterceptor.Concurrency.Tests.csproj", "{2F0AE12C-F8CC-4DF8-B99C-E04DE83451FE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "com.github.akovac35.AdapterInterceptor.Abstractions", "src\com.github.akovac35.AdapterInterceptor.Abstractions\com.github.akovac35.AdapterInterceptor.Abstractions.csproj", "{589D09D2-48D3-41CF-9D3C-68D9108D0D71}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "com.github.akovac35.AdapterInterceptor.Abstractions", "src\com.github.akovac35.AdapterInterceptor.Abstractions\com.github.akovac35.AdapterInterceptor.Abstractions.csproj", "{589D09D2-48D3-41CF-9D3C-68D9108D0D71}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "com.github.akovac35.AdapterInterceptor.DefaultAdapterMapper", "src\com.github.akovac35.AdapterInterceptor.DefaultAdapterMapper\com.github.akovac35.AdapterInterceptor.DefaultAdapterMapper.csproj", "{BC7565AE-D32C-4A9B-AC02-B67B495F8B04}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,10 @@ Global
 		{589D09D2-48D3-41CF-9D3C-68D9108D0D71}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{589D09D2-48D3-41CF-9D3C-68D9108D0D71}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{589D09D2-48D3-41CF-9D3C-68D9108D0D71}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BC7565AE-D32C-4A9B-AC02-B67B495F8B04}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BC7565AE-D32C-4A9B-AC02-B67B495F8B04}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BC7565AE-D32C-4A9B-AC02-B67B495F8B04}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BC7565AE-D32C-4A9B-AC02-B67B495F8B04}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
