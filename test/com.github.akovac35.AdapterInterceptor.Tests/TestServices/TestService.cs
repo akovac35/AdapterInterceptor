@@ -143,11 +143,11 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
             return new TestType();
         }
 
-        public bool Disposed { get; set; }
+        public bool IsDisposed { get; set; }
 
         public void Dispose()
         {
-            Disposed = true;
+            IsDisposed = true;
         }
     }
 }

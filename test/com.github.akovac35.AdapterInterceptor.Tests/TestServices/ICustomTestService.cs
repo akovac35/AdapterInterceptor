@@ -58,7 +58,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 
         T MethodUsingFiveArguments(T a, T b, T c, T d, T e);
 
-        bool Disposed { get; set; }
+        bool IsDisposed { get; set; }
 
         // The Dispose() method signature is provided by the IDisposable interface ...
     }
