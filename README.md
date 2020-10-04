@@ -16,6 +16,10 @@ This library contains AdapterInterceptor. Powered by Castle Core, the AdapterInt
 
 	[![NuGet Version](http://img.shields.io/nuget/v/com.github.akovac35.AdapterInterceptor.DefaultAdapterMapper.svg?style=flat)](https://www.nuget.org/packages/com.github.akovac35.AdapterInterceptor.DefaultAdapterMapper/)
 
+* [com.github.akovac35.AdapterInterceptor.DependencyInjection](https://www.nuget.org/packages/com.github.akovac35.AdapterInterceptor.DependencyInjection/)
+
+	[![NuGet Version](http://img.shields.io/nuget/v/com.github.akovac35.AdapterInterceptor.DependencyInjection.svg?style=flat)](https://www.nuget.org/packages/com.github.akovac35.AdapterInterceptor.DependencyInjection/)
+
 ## Status
 
 PRODUCTION READY starting from version 1.0.0.
@@ -37,11 +41,12 @@ In addition, it is often the case that a type compiled by a third party must be 
 - [AdapterInterceptor](#adapterinterceptor)
   * [Status](#status)
   * [Samples](#samples)
-  * [Summary](#Summary)
+  * [Summary](#summary)
   * [Contents](#contents)
     + [Usage](#usage)
     + [Logging](#logging)
     + [Performance](#performance)
+  * [Release history](#releasehistory)
   * [Contributing](#contributing)
   * [License](#license)
 
@@ -278,6 +283,7 @@ public static class ServiceCollectionExtensions
         // The IBlogServiceProxyImitator interface inherits the IDisposable interface. When the scope is closed, the proxy imitator instance will be disposed of by the DI framework, which will also invoke the Dispose() method on the target through the ProxyImitatorInterceptor. Note we have to release the ProxyImitatorInterceptor to release the target, it is never released by the Dispose() method invocation
         services.AddProxyImitator<IBlogServiceProxyImitator, BlogService>(targetFact =>
         {
+            // Obtain the target to be proxied
             var blogService = targetFact.GetService<BlogService>();
             return blogService;
         }, (serviceProvider, target) =>
@@ -409,6 +415,11 @@ Intel Core i7-2760QM CPU 2.40GHz (Sandy Bridge), 1 CPU, 4 logical and 4 physical
 |                      Direct |  Two arguments, async |    0.0627 |     0.0005 |      0.0004 |   1.00 |    0.00 |
 |      'Adapter, one mapping' |  Two arguments, async |    2.8512 |     0.0568 |      0.0531 |  45.32 |    0.91 |
 | 'Adapter, several mappings' |  Two arguments, async |    2.7860 |     0.0349 |      0.0326 |  44.37 |    0.67 |
+
+## Release history
+
+ * 1.0.0 - Production ready.
+ * 1.0.3 - updated dependencies, added extensions for ```object``` and ```IServiceCollection```, added ProxyImitatorInterceptor and tests.
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
