@@ -24,11 +24,20 @@ PRODUCTION READY starting from version 1.0.0.
 
 Samples utilizing library functionality are provided here: [AdapterInterceptor.Samples](https://github.com/akovac35/AdapterInterceptor.Samples)
 
+## Summary
+
+It is often the case that custom DTOs are used in different application layers for a specific service type, which involves method by method mappings between input and output types. Usually this is implemented by tedious and error prone custom code. This library provides a solution for removing the need for such code.
+
+In addition, it is often the case that a type compiled by a third party must be proxied for reasons of testing it or for wrapping its methods with additional functionality. In .NET, this is typically achieved by generating a dynamic proxy, which for the popular dynamic proxy generator Castle Core requires that the target type contains virtual methods - which is rarely the case. This library provides a solution for removing the requirement for the methods to be virtual.
+
+
+
 ## Contents
 
 - [AdapterInterceptor](#adapterinterceptor)
   * [Status](#status)
   * [Samples](#samples)
+  * [Summary](#Summary)
   * [Contents](#contents)
     + [Usage](#usage)
     + [Logging](#logging)
@@ -41,7 +50,7 @@ Enterprise applications typically rely on many backend systems, each of which de
 ```cs
 public class BlogService : IDisposable
 {
-    public BlogService(BlogContext context, ILoggerFactory loggerFactory = null)
+    public BlogService(BlogContext context, ILogger<BlogService> logger = null)
     {
         // ...
     }
@@ -139,6 +148,8 @@ await blogService.Add(BlogDto)
 
 The actual target invocation and input and return value mapping is taken care of by the AdapterInterceptor library and our custom type mapping code.
 
+A variant of ```AdapterInterceptor```, the ```ProxyImitatorInterceptor```, can be used when there is only a need for proxying non-virtual methods. Because no mapping is involved, it is easier to set up the proxy imitator.
+
 ### Usage
 
 AdapterInterceptor must be used together with the [Castle DynamicProxy](https://www.nuget.org/packages/Castle.Core/). There are several constructor variants available but generally, the following variant should typically be used: ```AdapterInterceptor<TTarget, TSource1, TDestination1, ...>(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null)```
@@ -193,25 +204,33 @@ namespace com.github.akovac35.AdapterInterceptor
 A sample of AdapterInterceptor instantiation for ASP.NET Core dependency injection is provided below; first we define a handy extension method for the ```IServiceCollection```:
 
 ```cs
+using com.github.akovac35.AdapterInterceptor;
+using com.github.akovac35.AdapterInterceptor.DependencyInjection;
+// ...
+
 public static class ServiceCollectionExtensions
 {       
     public static IServiceCollection AddScopedBlogServiceAdapter<T>(this IServiceCollection services)
     {
-        services.AddScoped<IBlogServiceAdapter<T>>(fact =>
+        // Register dependencies
+        // ...
+        
+        // Register the adapter
+        // The IBlogServiceAdapter interface inherits the IDisposable interface. When the scope is closed, the adapter instance will be disposed of by the DI framework, which will also invoke the Dispose() method on the target through the AdapterInterceptor. Note we have to release the AdapterInterceptor to release the target, it is never released by the Dispose() method invocation
+        services.AddAdapter<IBlogServiceAdapter<T>, BlogService>(targetFact =>
         {
-            // ...
+            // Obtain the target - the adaptee
+            var blogService = targetFact.GetService<BlogService>();
+            return blogService;
+        }, (serviceProvider, target) =>
+        {
             // We can use the com.github.akovac35.AdapterInterceptor.DefaultAdapterMapper, which uses AutoMapper, or a custom class implementing com.github.akovac35.AdapterInterceptor.IAdapterMapper
-            var adapterMapper = new DefaultAdapterMapper(mapper);
-            var adapterInterceptor = new AdapterInterceptor<BlogService, Blog, T>(blogService, adapterMapper);
+            var mapperConfiguration = serviceProvider.GetService<MapperConfiguration>();
+            var adapterMapper = new DefaultAdapterMapper(mapperConfiguration.CreateMapper());
+            var adapterInterceptor = new CustomAdapterInterceptor<BlogService, Blog, T>(target, adapterMapper);
+            return adapterInterceptor;
+        }, ServiceLifetime.Scoped);
 
-            // ...
-            var proxyGenerator = new Castle.DynamicProxy.ProxyGenerator();             
-
-            // IBlogServiceAdapter interface inherits the IDisposable interface. When the scope is closed, the adapter instance will be disposed of by the DI framework, which will also invoke the Dispose() method on the target. Note we have to release the AdapterInterceptor to release the target, it is never released by the Dispose() method invocation
-            var adapter = proxyGenerator.CreateInterfaceProxyWithoutTarget<IBlogServiceAdapter<T>>(adapterInterceptor);
-
-            return adapter;
-        });
         return services;
     }
 }
@@ -229,6 +248,61 @@ public class Startup
 }
 ```
 
+An adapter can also be created as follows:
+
+```cs
+using com.github.akovac35.AdapterInterceptor;
+using AutoMapper;
+
+var service = new TestService();
+var mapperConfig = new MapperConfiguration(cfg => cfg.CreateMap<CustomTestType, TestType>().ReverseMap());
+var mapper = new DefaultAdapterMapper(mapperConfig.CreateMapper());
+var adapter = service.GenerateAdapter<ICustomTestService<CustomTestType>, TestService>(target => new AdapterInterceptor<TestService, CustomTestType, TestType>(target, mapper));
+var result = adapter.MethodUsingOneArgument(new CustomTestType());
+```
+
+Registering and using the ```ProxyImitatorInterceptor```, which is a variant of ```AdapterInterceptor```, is very similar to the above:
+
+```cs
+using com.github.akovac35.AdapterInterceptor.DependencyInjection;
+// ...
+
+public static class ServiceCollectionExtensions
+{
+    public static IServiceCollection AddScopedBlogServiceProxyImitator(this IServiceCollection services)
+    {
+        // Register dependencies
+        // ...
+            
+        // Register the proxy imitator
+        // The IBlogServiceProxyImitator interface inherits the IDisposable interface. When the scope is closed, the proxy imitator instance will be disposed of by the DI framework, which will also invoke the Dispose() method on the target through the ProxyImitatorInterceptor. Note we have to release the ProxyImitatorInterceptor to release the target, it is never released by the Dispose() method invocation
+        services.AddProxyImitator<IBlogServiceProxyImitator, BlogService>(targetFact =>
+        {
+            var blogService = targetFact.GetService<BlogService>();
+            return blogService;
+        }, (serviceProvider, target) =>
+        {
+            var proxyImitatorInterceptor = new CustomProxyImitatorInterceptor<BlogService>(target);
+            return proxyImitatorInterceptor;
+        }, ServiceLifetime.Scoped);
+
+        return services;
+    }
+}
+```
+
+A proxy imitator can also be generated as follows:
+
+```cs
+using com.github.akovac35.AdapterInterceptor;
+
+var service = new TestService();
+var proxyImitator = service.GenerateProxyImitator<ITestServiceProxyImitator, TestService>(target => new ProxyImitatorInterceptor<TestService>(target));
+var result = proxyImitator.MethodUsingOneArgument(new TestType());
+```
+
+The ```IBlogServiceAdapter<T>``` and ```ITestServiceProxyImitator``` interfaces can be easily created in Visual Studio by navigating to the target type definition and either copying the screen contents, for types compiled by a third party, or extracting an interface, for types with the source code.
+
 **AdapterInterceptor must always be the last interceptor in the Castle DynamicProxy interceptor order**. AdapterInterceptor instance is thread-safe and lightweight and supports singleton, scoped and transient instantiation.
 
 The following is supported:
@@ -245,24 +319,36 @@ Extension example:
 using Castle.DynamicProxy;
 using com.github.akovac35.AdapterInterceptor;
 using com.github.akovac35.AdapterInterceptor.Misc;
+using com.github.akovac35.Logging;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Reflection;
 using System.Threading.Tasks;
 
 namespace WebApp.Blogs
 {
-    public class CustomAdapterInterceptor<TTarget, TSource1, TDestination1>: AdapterInterceptor<TTarget, TSource1, TDestination1>
+    public class CustomAdapterInterceptor<TTarget, TSource1, TDestination1> : AdapterInterceptor<TTarget, TSource1, TDestination1>
+        where TTarget : notnull
     {
-        public CustomAdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory loggerFactory = null) : base(target, adapterMapper, loggerFactory) { }
-
-        protected override object InvokeTargetSync(MethodInfo adapterMethod, AdapterInvocationInformation adapterInvocationInformation, object?[] targetArguments, IInvocation invocation)
+        public CustomAdapterInterceptor(TTarget target, IAdapterMapper adapterMapper, ILoggerFactory? loggerFactory = null) : base(target, adapterMapper, loggerFactory)
         {
-            return base.InvokeTargetSync(adapterMethod, adapterInvocationInformation, targetArguments, invocation);
+            _logger = (loggerFactory?.CreateLogger<CustomAdapterInterceptor<TTarget, TSource1, TDestination1>>()) ?? (ILogger)NullLogger.Instance;
+        }
+
+        private ILogger _logger;
+
+        protected override object? InvokeTargetSync(MethodInfo adapterMethod, AdapterInvocationInformation adapterInvocationInformation, object?[] targetArguments, IInvocation invocation)
+        {
+            _logger.Here(l => l.LogInformation("Hello from a custom interceptor."));
+            var result = base.InvokeTargetSync(adapterMethod, adapterInvocationInformation, targetArguments, invocation);
+            return result;
         }
 
         protected override async Task<TAdapter> InvokeTargetGenericTaskAsync<TAdapter>(MethodInfo adapterMethod, AdapterInvocationInformation adapterInvocationInformation, object?[] targetArguments)
         {
-            return await base.InvokeTargetGenericTaskAsync<TAdapter>(adapterMethod, adapterInvocationInformation, targetArguments);
+            _logger.Here(l => l.LogInformation("Hello from a custom interceptor."));
+            var result = await base.InvokeTargetGenericTaskAsync<TAdapter>(adapterMethod, adapterInvocationInformation, targetArguments);
+            return result;
         }
 
         // And similarly for Task and (generic) ValueTask
