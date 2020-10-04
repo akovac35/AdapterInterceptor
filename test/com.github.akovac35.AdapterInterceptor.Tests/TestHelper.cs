@@ -19,7 +19,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Threading;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests
 {
@@ -77,14 +76,19 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             {
                 var sink = new TestSink();
                 sink.MessageLogged += Sink_MessageLogged;
-                return new TestLoggerFactory(sink, true);
+                sink.ScopeStarted += Sink_ScopeStarted;
+                return new TestLoggerFactory(sink);
             }
+        }
+
+        private static void Sink_ScopeStarted(ScopeContext obj)
+        {
+            TestContext.WriteLine(obj);
         }
 
         private static void Sink_MessageLogged(WriteContext obj)
         {
-            KeyValuePair<string, object>[] loggerScope = obj.Scope as KeyValuePair<string, object>[];
-            TestContext.WriteLine($"[{DateTime.Now.ToString()}] {Thread.CurrentThread.ManagedThreadId} {obj.LogLevel.ToString()} <{obj.LoggerName}:{loggerScope?[0].Value}:{loggerScope?[2].Value}> {(obj.Exception != null ? obj.Exception.Message : obj.Message)}");
+            TestContext.WriteLine(obj);
         }
 
         public static IContainer CreateContainerBuilder()

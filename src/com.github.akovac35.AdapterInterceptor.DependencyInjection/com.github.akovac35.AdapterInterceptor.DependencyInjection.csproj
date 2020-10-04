@@ -1,7 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Powered by Castle Core, the AdapterInterceptor enables the generation of efficient dynamic proxies for proxying or adapting invocation contracts without requiring virtual methods on the target.</Description>
+    <Description>
+      Provides adapter interceptor related extensions for Microsoft.Extensions.DependencyInjection.IServiceCollection.
+    </Description>
     <VersionPrefix>1.0.1</VersionPrefix>
     <Authors>Aleksander Kovač</Authors>
     <TargetFrameworks>netstandard2.1</TargetFrameworks>
@@ -20,16 +22,16 @@
     <IsPackable>true</IsPackable>
   </PropertyGroup>
 
-  <ItemGroup>    
-    <PackageReference Include="Castle.Core" Version="4.4.1" />
-    <PackageReference Include="com.github.akovac35.Logging" Version="1.1.2" />
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-
+  <ItemGroup>
     <None Include="../../Resources/.NET_Core_Logo.png" Pack="true" PackagePath="" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\com.github.akovac35.AdapterInterceptor.Abstractions\com.github.akovac35.AdapterInterceptor.Abstractions.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="3.1.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\com.github.akovac35.AdapterInterceptor\com.github.akovac35.AdapterInterceptor.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
@@ -7,21 +7,23 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Autofac" Version="5.1.3" />
-    <PackageReference Include="Autofac.Extras.DynamicProxy" Version="5.0.0" />
-    <PackageReference Include="com.github.akovac35.Logging.Testing" Version="1.0.8" />
+    <PackageReference Include="Autofac" Version="6.0.0" />
+    <PackageReference Include="Autofac.Extras.DynamicProxy" Version="6.0.0" />
+    <PackageReference Include="com.github.akovac35.Logging.Testing" Version="1.1.2" />
     <PackageReference Include="DeepEqual" Version="2.0.0" />
-    <PackageReference Include="Moq" Version="4.14.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="3.1.8" />
+    <PackageReference Include="Moq" Version="4.14.6" />
     <PackageReference Include="nunit" Version="3.12.0" />
-    <PackageReference Include="NUnit3TestAdapter" Version="3.16.1">
+    <PackageReference Include="NUnit3TestAdapter" Version="3.17.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.6.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.7.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\com.github.akovac35.AdapterInterceptor.DefaultAdapterMapper\com.github.akovac35.AdapterInterceptor.DefaultAdapterMapper.csproj" />
+    <ProjectReference Include="..\..\src\com.github.akovac35.AdapterInterceptor.DependencyInjection\com.github.akovac35.AdapterInterceptor.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\src\com.github.akovac35.AdapterInterceptor\com.github.akovac35.AdapterInterceptor.csproj" />
   </ItemGroup>
 

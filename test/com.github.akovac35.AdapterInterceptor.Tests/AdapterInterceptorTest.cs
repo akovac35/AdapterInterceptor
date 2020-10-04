@@ -5,6 +5,7 @@
 //   Aleksander Kovač
 
 using Autofac;
+using Castle.DynamicProxy;
 using com.github.akovac35.AdapterInterceptor.Helper;
 using com.github.akovac35.AdapterInterceptor.Misc;
 using com.github.akovac35.AdapterInterceptor.Tests.TestServices;
@@ -120,7 +121,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
                     new object[] { nameof(ReturnGenericTask_MethodWithMixedTypeParametersAsync), Container.Resolve<ICustomTestService<CustomTestType>>(), new object[] { null }, ReturnGenericTask_MethodWithMixedTypeParametersAsync, null, true, true },
                     new object[] { nameof(ReturnGenericTask_MethodWithClassTypeParameters), Container.Resolve<ICustomTestService<CustomTestType>>(), new object[] { new CustomTestType(new TestType()) }, ReturnGenericTask_MethodWithClassTypeParameters, new CustomTestType(new TestType()), true, false },
                     new object[] { nameof(ReturnGenericTask_MethodWithClassTypeParameters), Container.Resolve<ICustomTestService<CustomTestType>>(), new object[] { null }, ReturnGenericTask_MethodWithClassTypeParameters, null, true, false },
-                    
+
                     new object[] { nameof(ReturnTask_MethodWithMixedTypeParametersAsync), Container.Resolve<ICustomTestService<CustomTestType>>(), new object[] { new CustomTestType(new TestType()) }, ReturnTask_MethodWithMixedTypeParametersAsync, null, false, true },
                     new object[] { nameof(ReturnTask_MethodWithClassTypeParameters), Container.Resolve<ICustomTestService<CustomTestType>>(), new object[] { new CustomTestType(new TestType()) }, ReturnTask_MethodWithClassTypeParameters, null, false, false }
                 };
@@ -418,6 +419,22 @@ Target method: {MethodInfo: , Parameters: {ParameterInfo[0]: []}, ReturnType: {T
             var ex = Assert.Throws<AdapterInterceptorException>(() => AssertReturnTypeCombination(adapterMethodStub.Object, targetMethodStub.Object, invocationType));
             TestContext.WriteLine(ex);
             Assert.AreEqual(expectedErrorMessage, ex.Message);
+        }
+
+        [Test]
+        public async Task AdapterInterceptor_PassingExecutionContext_WorksAsync()
+        {
+            var customService = Container.ResolveNamed<ICustomTestService<CustomTestType>>("GenericCustomTestService");
+            var interceptors = (IInterceptor[])customService.GetType().GetField("__interceptors", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(customService);
+            var testService = (TestService)interceptors[0].GetType().GetProperty("Target", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(interceptors[0]);
+
+            int testVal = 10;
+            testService.AsyncInvocationContext.Value = testVal;
+            KeyValuePair<int, int> result = await customService.ReturnTask_MedthodUsingExecutionContext().ConfigureAwait(false);
+
+            // The following line can be uncommented for a more rigorous test
+            // Assert.AreNotEqual(Thread.CurrentThread.ManagedThreadId, result.Key, "The tested method should be executed on a separate thread, which may occasionally not happen - please repeat this test.");
+            Assert.AreEqual(testVal, result.Value);
         }
     }
 }

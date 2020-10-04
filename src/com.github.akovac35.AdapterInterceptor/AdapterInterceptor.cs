@@ -85,7 +85,7 @@ namespace com.github.akovac35.AdapterInterceptor
         /// <param name="invocation">Encapsulates an invocation of a proxied method.</param>
         public virtual void Intercept(IInvocation invocation)
         {
-            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Entering(invocation.ToLoggerString(simpleType: true), invocation.Arguments, invocation.ReturnValue));
+            if (_logger.IsEnteringExitingEnabled()) _logger.Here(l => l.Entering(invocation.ToLoggerString(simpleType: true)!, invocation.Arguments, invocation.ReturnValue));
 
             MethodInfo adapterMethod = invocation.Method;
             AdapterInvocationInformation adapterInvocationInformation = AdapterToTargetMethodDictionary.GetOrAdd(adapterMethod, item =>

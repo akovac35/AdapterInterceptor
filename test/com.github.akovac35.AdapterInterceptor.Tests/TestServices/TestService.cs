@@ -6,11 +6,13 @@
 
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using System;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 {
-    public class TestService: TestServiceBase, IDisposable
+    public class TestService : TestServiceBase, IDisposable
     {
         public override string ReturnObject_VirtualMethodWithValueTypeParameters(int a, string b)
         {
@@ -141,6 +143,13 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
         public TestType MethodUsingFiveArguments(TestType a, TestType b, TestType c, TestType d, TestType e)
         {
             return new TestType();
+        }
+
+        public AsyncLocal<int> AsyncInvocationContext { get; } = new AsyncLocal<int>();
+        public async Task<KeyValuePair<int, int>> ReturnTask_MedthodUsingExecutionContext()
+        {
+            await Task.Factory.StartNew(() => Task.Delay(1000).ConfigureAwait(false), TaskCreationOptions.LongRunning).ConfigureAwait(false);
+            return new KeyValuePair<int, int>(Thread.CurrentThread.ManagedThreadId, AsyncInvocationContext.Value);
         }
 
         public bool IsDisposed { get; set; }

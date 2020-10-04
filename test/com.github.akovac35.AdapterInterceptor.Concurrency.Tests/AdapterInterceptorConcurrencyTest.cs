@@ -38,7 +38,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
             Action action1 = () =>
             {
                 for (int i = 0; i < 900000; i++)
-                {                    
+                {
                     var tmp = service.ReturnGenericTask_MethodWithMixedTypeParametersAsync(new CustomTestType(), false).Result;
                 }
             };

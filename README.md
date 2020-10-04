@@ -1,6 +1,6 @@
 ﻿# AdapterInterceptor
 
-This library contains AdapterInterceptor. Powered by Castle Core, AdapterInterceptor enables the generation of efficient dynamic proxies for converting an interface into another interface without requiring virtual methods or dedicated target interfaces.
+This library contains AdapterInterceptor. Powered by Castle Core, the AdapterInterceptor enables the generation of efficient dynamic proxies for proxying or adapting invocation contracts without requiring virtual methods on the target.
 
 ![this](Resources/.NET_Core_Logo_small.png)
 

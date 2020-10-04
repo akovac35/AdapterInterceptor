@@ -4,7 +4,7 @@
     <Description>
       Provides an AutoMapper based default implementation of com.github.akovac35.IAdapterMapper for com.github.akovac35.AdapterInterceptor.
     </Description>
-    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionPrefix>1.0.1</VersionPrefix>
     <Authors>Aleksander Kovač</Authors>
     <TargetFrameworks>netstandard2.1</TargetFrameworks>
     <PackageTags>adapter, dynamic, proxy, castle, mapper, interceptor</PackageTags>
@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AutoMapper" Version="9.0.0" />
+    <PackageReference Include="AutoMapper" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>

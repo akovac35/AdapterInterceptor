@@ -6,11 +6,12 @@
 
 using com.github.akovac35.AdapterInterceptor.Tests.TestTypes;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
 {
-    public interface ICustomTestService<T>: IDisposable
+    public interface ICustomTestService<T> : IDisposable
     {
         void ReturnVoid_MethodWithoutParameters();
 
@@ -57,6 +58,8 @@ namespace com.github.akovac35.AdapterInterceptor.Tests.TestServices
         T MethodUsingOneArgument(T a);
 
         T MethodUsingFiveArguments(T a, T b, T c, T d, T e);
+
+        Task<KeyValuePair<int, int>> ReturnTask_MedthodUsingExecutionContext();
 
         bool IsDisposed { get; set; }
 
