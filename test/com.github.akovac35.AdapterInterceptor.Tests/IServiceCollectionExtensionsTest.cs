@@ -32,7 +32,7 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
         {
             var services = new ServiceCollection();
             services.TryAddScoped<TestService>();
-            services.AddProxyImitator<ICustomTestService<TestType>, TestService>(targetFact => targetFact.GetRequiredService<TestService>(), ServiceLifetime.Scoped);
+            services.AddProxyImitator<ICustomTestService<TestType>, TestService>(targetFact => targetFact.GetRequiredService<TestService>(), (serviceProvider, target) => new ProxyImitatorInterceptor<TestService>(target, TestHelper.LoggerFactory), ServiceLifetime.Scoped);
             var provider = services.BuildServiceProvider();
 
             var service = provider.GetRequiredService<ICustomTestService<TestType>>();
@@ -53,7 +53,12 @@ namespace com.github.akovac35.AdapterInterceptor.Tests
                 var mapper = new DefaultAdapterMapper(mapperConfig.CreateMapper());
                 return mapper;
             });
-            services.AddAdapter<ICustomTestService<CustomTestType>, TestService, CustomTestType, TestType>(targetFact => targetFact.GetRequiredService<TestService>(), adapterMapperFact => adapterMapperFact.GetRequiredService<DefaultAdapterMapper>(), ServiceLifetime.Scoped);
+            services.AddAdapter<ICustomTestService<CustomTestType>, TestService>(targetFact => targetFact.GetRequiredService<TestService>(), (serviceProvider, target) =>
+            {
+                var mapper = serviceProvider.GetRequiredService<DefaultAdapterMapper>();
+                var interceptor = new AdapterInterceptor<TestService, CustomTestType, TestType>(target, mapper, TestHelper.LoggerFactory);
+                return interceptor;
+            }, ServiceLifetime.Scoped);
             var provider = services.BuildServiceProvider();
 
             var service = provider.GetRequiredService<ICustomTestService<CustomTestType>>();
