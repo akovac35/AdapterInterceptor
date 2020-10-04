@@ -4,7 +4,7 @@
     <Description>
       Provides adapter interceptor related extensions for Microsoft.Extensions.DependencyInjection.IServiceCollection.
     </Description>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Authors>Aleksander Kovač</Authors>
     <TargetFrameworks>netstandard2.1</TargetFrameworks>
     <PackageTags>adapter, dynamic, proxy, castle, mapper, interceptor</PackageTags>

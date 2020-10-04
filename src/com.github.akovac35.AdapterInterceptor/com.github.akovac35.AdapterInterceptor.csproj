@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <Description>Powered by Castle Core, the AdapterInterceptor enables the generation of efficient dynamic proxies for proxying or adapting invocation contracts without requiring virtual methods on the target.</Description>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Authors>Aleksander Kovač</Authors>
     <TargetFrameworks>netstandard2.1</TargetFrameworks>
     <PackageTags>adapter, dynamic, proxy, castle, mapper, interceptor</PackageTags>
